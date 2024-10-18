@@ -1,7 +1,8 @@
-# SIMS-Web
-Attempt to run SIMS inference in the browser
-
+# sims-web
+Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [ONNX](https://onnxruntime.ai/) and [h5wasm](https://github.com/usnistgov/h5wasm)
 
 # References
+[Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 
-[ONNX Runtime](https://onnxruntime.ai/)
+
+[h5wasm](https://github.com/usnistgov/h5wasm)
