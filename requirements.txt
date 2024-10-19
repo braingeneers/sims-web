@@ -5,3 +5,12 @@ onnx
 onnxruntime
 
 ipython
+
+# SIMS requirmenets
+anndata
+boto3
+scikit-learn==1.2.2
+scanpy==1.9.3
+lightning==2.0.2
+pytorch-lightning==2.0.2
+pytorch-tabnet==4.0
