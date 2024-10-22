@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sims-web</title>
+</head>
+
+<body>
+    <h1>ONNX Runtime Web Sample</h1>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <script>
+        async function main() {
+            try {
+                // create a new session and load the specific model.
+                //
+                // the model in this example contains a single MatMul node
+                // it has 2 inputs: 'a'(float32, 3x4) and 'b'(float32, 4x3)
+                // it has 1 output: 'c'(float32, 3x3)
+                const session = await ort.InferenceSession.create('data/sims.onnx');
+                console.log('model loaded');
+            } catch (e) {
+                document.write(`failed to inference ONNX model: ${e}.`);
+            }
+        }
+        main();
+        console.log('done');
+    </script>
+</body>
+</html>
