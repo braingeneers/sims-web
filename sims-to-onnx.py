@@ -24,6 +24,7 @@ if __name__ == "__main__":
     )
 
     # Save the model as an ONNX
-    sims.model.to_onnx("data/sims.onnx", torch.tensor(adata.X), export_params=True)
-
-    sims.model.to_onnx("data/sims.onnx", torch.zeros(2, 33694), export_params=True)
+    # sims.model.to_onnx("data/sims.onnx", torch.tensor(adata.X), export_params=True)
+    # sims.model.to_onnx("data/sims.onnx", torch.zeros(2, 33694), export_params=True)
+    # sims.model.to_onnx("data/sims.onnx", torch.zeros(1, 33694), export_params=True)
+    sims.model.to_onnx("data/sims.onnx", torch.zeros(1024, 33694), export_params=True)
