@@ -7,24 +7,22 @@ import gc
 
 import sys
 
+# Assumes you have the SIMS repo as a peer to this one...
 sys.path.insert(0, "../SIMS")
 from scsims import SIMS
 
 import torch.onnx
 
 if __name__ == "__main__":
-    # Load a sample dataset - onnx requires an example
-    adata = sc.read_h5ad("data/pbmc3k_processed.h5ad")
-    # Process the dataset
-    sc.pp.scale(adata)
-
     # Load the checkpoint
-    sims = SIMS(
-        weights_path="data/11A_2organoids.ckpt", map_location=torch.device("cpu")
-    )
+    sims = SIMS(weights_path="11A_2organoids.ckpt", map_location=torch.device("cpu"))
 
-    # Save the model as an ONNX
-    # sims.model.to_onnx("data/sims.onnx", torch.tensor(adata.X), export_params=True)
-    # sims.model.to_onnx("data/sims.onnx", torch.zeros(2, 33694), export_params=True)
-    # sims.model.to_onnx("data/sims.onnx", torch.zeros(1, 33694), export_params=True)
-    sims.model.to_onnx("data/sims.onnx", torch.zeros(1024, 33694), export_params=True)
+    # Save the model as an ONNX - note constant batch size at this point
+    batch_size = 8
+    sims.model.to_onnx("sims.onnx", torch.zeros(8, 33694), export_params=True)
+    print("Wrote out ONNX model")
+
+    # Write out the list of genes corresponding to the models input
+    with open("genes.txt", "w") as f:
+        f.write("\n".join(map(str, sims.model.genes)))
+    print("Wrote out gene list")

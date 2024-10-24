@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>onnx</title>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <h1>onnx</h1>
+</body>
+<script type="module">
+    async function main() {
+        try {
+            // create a new session and load the specific model.
+            const session = await ort.InferenceSession.create('sims.onnx');
+            console.log('sims model loaded');
+
+            // prepare inputs. a tensor need its corresponding TypedArray as data
+            const batch_size = 8;
+            const X = new ort.Tensor('float32', new Float32Array(batch_size*33694), [batch_size, 33694]); 
+
+            // feed inputs and run
+            const results = await session.run({"input.1": X});
+            console.log('inference done');
+            console.log(results);
+            document.write(`<div>Predictions: ${results["826"].cpuData}</div>`);
+        } catch (e) {
+            document.write(`failed to inference ONNX model: ${e}.`);
+        }
+    }
+    main();
+    console.log('done');
+</script>
+</html>
