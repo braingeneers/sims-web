@@ -15,14 +15,16 @@ import torch.onnx
 
 if __name__ == "__main__":
     # Load the checkpoint
-    sims = SIMS(weights_path="11A_2organoids.ckpt", map_location=torch.device("cpu"))
+    sims = SIMS(
+        weights_path="data/11A_2organoids.ckpt", map_location=torch.device("cpu")
+    )
 
     # Save the model as an ONNX - note constant batch size at this point
     batch_size = 8
-    sims.model.to_onnx("sims.onnx", torch.zeros(8, 33694), export_params=True)
+    sims.model.to_onnx("data/sims.onnx", torch.zeros(8, 33694), export_params=True)
     print("Wrote out ONNX model")
 
     # Write out the list of genes corresponding to the models input
-    with open("genes.txt", "w") as f:
+    with open("data/genes.txt", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
     print("Wrote out gene list")

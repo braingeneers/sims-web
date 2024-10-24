@@ -15,7 +15,7 @@
     async function main() {
         try {
             // create a new session and load the specific model.
-            const session = await ort.InferenceSession.create('sims.onnx');
+            const session = await ort.InferenceSession.create('data/sims.onnx');
             console.log('sims model loaded');
 
             // prepare inputs. a tensor need its corresponding TypedArray as data
