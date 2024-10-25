@@ -11,8 +11,12 @@ Note: Work in progress...currently functional proof of the steps
 
 [onnx.html](onnx.html) demonstrates loading the sims.onnx file in the browser and running forward inference on a sample zero tensor.
 
+[index.html](index.html) puts these functional steps together towards a basic MVP
+
 # References
 [h5wasm](https://github.com/usnistgov/h5wasm)
+
+[anndata/h5ad file struction](https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html)
 
 [Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 

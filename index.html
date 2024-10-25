@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <title>SIMS Web</title>
+</head>
+
+<body>
+    <h1>SIMS Web</h1>
+</body>
+
+<script type="module">
+    function log(msg) {
+        document.body.innerHTML += `<p>${msg}</p>`;
+    };
+
+    import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
+    const { FS } = await h5wasm.ready;
+    log("h5wasm loaded");
+
+    async function loadAnnData() {
+
+        // Load an h5ad file and save to local temp
+        let path = "data/pbmc3k_processed.h5ad";
+        let response = await fetch(path);
+        let ab = await response.arrayBuffer();
+        FS.writeFile("temp.h5ad", new Uint8Array(ab));
+        log(`${path} loaded`);
+
+        // Then open the file using h5wasm
+        let f = new h5wasm.File("temp.h5ad", "r");
+        log(`<p>${path} parsed as h5/annData file</p>`);
+
+        log(`Top Level Keys: ${f.keys()}`);
+        log(`X shape: ${f.get("X").shape}`);
+        log(`X Genes: ${f.get("var/index").value.slice(0,10)}...`);
+        log(`X Cell 0 Expression: ${f.get("X").value.slice(0,10)}...`);
+
+        return f
+    }
+
+    let annData = await loadAnnData();
+
+    async function extractCellXGene(annData) {
+        let response = await fetch("data/genes.txt");
+        let text = await response.text();
+        let allGenes = text.split("\n");
+        log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0,10)}...`);
+
+        // prepare inputs. a tensor need its corresponding TypedArray as data
+        const batchSize = 8;
+        const X = new ort.Tensor('float32', new Float32Array(batchSize*allGenes.length), [batchSize, allGenes.length]); 
+
+        let sampleGenes = annData.get("var/index").value;
+        let sampleExpression = annData.get("X").value;
+
+        // Populate the tensor with the first batch of cells
+        for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+            let geneIndexInAllGenes = allGenes.indexOf(sampleGenes[geneIndex]);
+            for (let cellIndex = 0; cellIndex < batchSize; cellIndex++) {
+                X.data[cellIndex*allGenes.length + geneIndexInAllGenes] =
+                    sampleExpression[cellIndex*sampleGenes.length + geneIndex];
+            }
+        }
+        log("Populated X tensor");
+        return X
+    }
+
+    let cellXGene = await extractCellXGene(annData);
+
+    async function runInference(X) {
+        try {
+            // create a new session and load the specific model.
+            const session = await ort.InferenceSession.create('data/sims.onnx');
+            log('sims model loaded');
+
+            // feed inputs and run
+            const results = await session.run({"input.1": X});
+            log('inference done');
+            log(results);
+            log(`<div>Predictions: ${results["826"].cpuData}</div>`);
+            return results;
+        } catch (e) {
+            log(`failed to inference ONNX model: ${e}.`);
+        }
+    }
+
+    let results = await runInference(cellXGene);
+</script>
+
+</html>
