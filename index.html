@@ -15,6 +15,10 @@
     <label class="form-label">Choose an Anndata/Scanpy (.h5ad) file to upload</label>
     <input class="form-control" type="file" id="file" name="file" accept=".h5ad"/>
 
+    <div id="spinner" class="spinner-border" role="status" style="display: none;">
+        <span class="sr-only">Loading...</span>
+    </div>
+
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.6/dist/umd/popper.min.js" integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut" crossorigin="anonymous"></script>
@@ -51,10 +55,11 @@
     async function runInference(X) {
         try {
             // create a new session and load the specific model.
+            console.log("Loading SIMS model...");
             const session = await ort.InferenceSession.create('data/sims.onnx');
-            console.log('SIMS model loaded');
 
             // feed inputs and run
+            console.log("Running inference...");
             const results = await session.run({"input.1": X});
             console.log(`Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}`);
             return results;
@@ -82,9 +87,11 @@
             console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0,10)}...`);
 
             let X = await extractAndInflateCellXGene(annData);
+            document.getElementById('spinner').style.display = "block";
             let results = await runInference(X);
+            document.getElementById('spinner').style.display = "none";
             let pred = results["826"].cpuData;
-            document.body.innerHTML += `<h2>${file.name}<h2>`;
+            document.body.innerHTML += `<h2>Cell 0 Predictions for ${file.name}<h2>`;
             document.body.innerHTML += '<ul class="list-group">';
             for (let i = 0; i < 8; i++) {
                 document.body.innerHTML += `<li class="list-group-item">${pred[i]}</li>`

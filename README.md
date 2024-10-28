@@ -1,7 +1,8 @@
 # sims-web
 Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [ONNX](https://onnxruntime.ai/) and [h5wasm](https://github.com/usnistgov/h5wasm)
 
-Note: Work in progress...currently functional proof of the steps
+# Demo
+[index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) that opens an h5ad in the browser and prints the raw predictions for the first cell out.
 
 # Functional Experiments 
 
