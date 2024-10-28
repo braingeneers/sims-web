@@ -4,50 +4,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+    <!-- ONNX Web WASM Runtime-->
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <title>SIMS Web</title>
 </head>
 
 <body>
     <h1>SIMS Web</h1>
+    <label class="form-label">Choose an Anndata/Scanpy (.h5ad) file to upload</label>
+    <input class="form-control" type="file" id="file" name="file" accept=".h5ad"/>
+
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.6/dist/umd/popper.min.js" integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
 </body>
 
 <script type="module">
-    function log(msg) {
-        document.body.innerHTML += `<p>${msg}</p>`;
-    };
-
-    import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
-    const { FS } = await h5wasm.ready;
-    log("h5wasm loaded");
-
-    async function loadAnnData() {
-        // Load an h5ad file and save to local temp
-        let path = "data/pbmc3k_processed.h5ad";
-        let response = await fetch(path);
-        let ab = await response.arrayBuffer();
-        FS.writeFile("temp.h5ad", new Uint8Array(ab));
-        log(`${path} loaded`);
-
-        // Then open the file using h5wasm
-        let f = new h5wasm.File("temp.h5ad", "r");
-        log(`<p>${path} parsed as h5/annData file</p>`);
-
-        log(`Top Level Keys: ${f.keys()}`);
-        log(`X shape: ${f.get("X").shape}`);
-        log(`X Genes: ${f.get("var/index").value.slice(0,10)}...`);
-        log(`X Cell 0 Expression: ${f.get("X").value.slice(0,10)}...`);
-
-        return f
-    }
-
-    let annData = await loadAnnData();
-
-    async function extractCellXGene(annData) {
+    async function extractAndInflateCellXGene(annData) {
         let response = await fetch("data/genes.txt");
         let text = await response.text();
         let allGenes = text.split("\n");
-        log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0,10)}...`);
+        console.log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0,10)}...`);
 
         // prepare inputs. a tensor need its corresponding TypedArray as data
         const batchSize = 8;
@@ -64,31 +43,57 @@
                     sampleExpression[cellIndex*sampleGenes.length + geneIndex];
             }
         }
-        log("Populated X tensor");
-        log(`X Cell 0 Expression #44: ${X.cpuData[44]}...`);
+        console.log("Populated X tensor");
+        console.log(`X Cell 0 Expression #44: ${X.cpuData[44]}...`);
         return X
     }
-
-    let cellXGene = await extractCellXGene(annData);
 
     async function runInference(X) {
         try {
             // create a new session and load the specific model.
             const session = await ort.InferenceSession.create('data/sims.onnx');
-            log('sims model loaded');
+            console.log('SIMS model loaded');
 
             // feed inputs and run
             const results = await session.run({"input.1": X});
-            log('inference done');
-            log(results);
-            log(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);
+            console.log(`Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}`);
             return results;
         } catch (e) {
-            log(`failed to inference ONNX model: ${e}.`);
+            console.log(`Failed to inference ONNX model: ${e}.`);
         }
     }
 
-    let results = await runInference(cellXGene);
+    import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
+    const { FS } = await h5wasm.ready;
+    console.log("h5wasm loaded");
+
+    document.getElementById('file').addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            // Read file and write back to browser file system for h5wasm to parse
+            const binaryData = event.target.result;
+            FS.writeFile("temp.h5ad", new Uint8Array(binaryData));
+
+            let annData = new h5wasm.File("temp.h5ad", "r");
+            console.log(`Top level keys: ${annData.keys()}`);
+            console.log(`X shape: ${annData.get("X").shape}`);
+            console.log(`X genes: ${annData.get("var/index").value.slice(0,10)}...`);
+            console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0,10)}...`);
+
+            let X = await extractAndInflateCellXGene(annData);
+            let results = await runInference(X);
+            let pred = results["826"].cpuData;
+            document.body.innerHTML += `<h2>${file.name}<h2>`;
+            document.body.innerHTML += '<ul class="list-group">';
+            for (let i = 0; i < 8; i++) {
+                document.body.innerHTML += `<li class="list-group-item">${pred[i]}</li>`
+            }
+            document.body.innerHTML += '</ul>'
+        };
+
+        reader.readAsArrayBuffer(file); 
+    });
 </script>
 
 </html>
