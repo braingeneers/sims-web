@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     # Save the model as an ONNX - note constant batch size at this point
     batch_size = 8
-    sims.model.to_onnx("data/sims.onnx", torch.zeros(8, 33694), export_params=True)
+    sims.model.to_onnx("data/sims.onnx", torch.zeros(batch_size, 33694), export_params=True)
     print("Wrote out ONNX model")
 
     # Write out the list of genes corresponding to the models input

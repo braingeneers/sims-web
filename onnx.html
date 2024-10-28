@@ -21,12 +21,15 @@
             // prepare inputs. a tensor need its corresponding TypedArray as data
             const batch_size = 8;
             const X = new ort.Tensor('float32', new Float32Array(batch_size*33694), [batch_size, 33694]); 
+            for (let i = 0; i < 100; i++) {
+                X.data[i] = 0.5;
+            }
 
             // feed inputs and run
             const results = await session.run({"input.1": X});
             console.log('inference done');
             console.log(results);
-            document.write(`<div>Predictions: ${results["826"].cpuData}</div>`);
+            document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0,8)}</div>`);
         } catch (e) {
             document.write(`failed to inference ONNX model: ${e}.`);
         }

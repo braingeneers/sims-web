@@ -21,3 +21,5 @@ Note: Work in progress...currently functional proof of the steps
 [Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 
 [ONNX Runtime Web (WASM Backend)](https://onnxruntime.ai/docs/get-started/with-javascript/web.html)
+
+[ONNX Runtime Web Platform Functionality Details](https://www.npmjs.com/package/onnxruntime-web)

@@ -22,7 +22,6 @@
     log("h5wasm loaded");
 
     async function loadAnnData() {
-
         // Load an h5ad file and save to local temp
         let path = "data/pbmc3k_processed.h5ad";
         let response = await fetch(path);
@@ -66,6 +65,7 @@
             }
         }
         log("Populated X tensor");
+        log(`X Cell 0 Expression #44: ${X.cpuData[44]}...`);
         return X
     }
 
@@ -81,7 +81,7 @@
             const results = await session.run({"input.1": X});
             log('inference done');
             log(results);
-            log(`<div>Predictions: ${results["826"].cpuData}</div>`);
+            log(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);
             return results;
         } catch (e) {
             log(`failed to inference ONNX model: ${e}.`);
