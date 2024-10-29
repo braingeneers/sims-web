@@ -29,9 +29,6 @@
                         </div>
                     </div>
                     <button id="upload_btn" class="btn btn-primary">Predict</button>
-                    <div id="spinner" class="spinner-border" role="status" style="display: none;">
-                        <span class="sr-only">Loading...</span>
-                    </div>
                 </div>
                 <div id="results">
                 </div>
@@ -57,12 +54,14 @@
     });
 
     async function extractAndInflateCellXGene(annData) {
+        document.getElementById('results').innerHTML = "Fetching gene list...";
         let response = await fetch("data/genes.txt");
         let text = await response.text();
         let allGenes = text.split("\n");
         console.log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0, 10)}...`);
 
         // prepare inputs. a tensor need its corresponding TypedArray as data
+        document.getElementById('results').innerHTML = "Inflating genes...";
         const batchSize = 8;
         const X = new ort.Tensor('float32', new Float32Array(batchSize * allGenes.length), [batchSize, allGenes.length]);
 
@@ -85,10 +84,12 @@
     async function runInference(X) {
         try {
             // create a new session and load the specific model.
+            document.getElementById('results').innerHTML = "Loading SIMS model...";
             console.log("Loading SIMS model...");
             const session = await ort.InferenceSession.create('data/sims.onnx');
 
             // feed inputs and run
+            document.getElementById('results').innerHTML = "Running inference...";
             console.log("Running inference...");
             const results = await session.run({ "input.1": X });
             console.log(`Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}`);
@@ -107,6 +108,7 @@
         const reader = new FileReader();
         reader.onload = async (event) => {
             // Read file and write back to browser file system for h5wasm to parse
+            document.getElementById('results').innerHTML = "Reading h5ad file...";
             const binaryData = event.target.result;
             FS.writeFile("temp.h5ad", new Uint8Array(binaryData));
 
@@ -117,12 +119,10 @@
             console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
 
             let X = await extractAndInflateCellXGene(annData);
-            document.getElementById('spinner').style.display = "block";
             let results = await runInference(X);
-            document.getElementById('spinner').style.display = "none";
             let pred = results["826"].cpuData;
             let output = document.getElementById('results');
-            output.innerHTML += '<ul class="list-group">';
+            output.innerHTML = '<ul class="list-group">';
             for (let i = 0; i < 8; i++) {
                 output.innerHTML += `<li class="list-group-item">${pred[i]}</li>`
             }
