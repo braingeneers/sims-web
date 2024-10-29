@@ -84,8 +84,8 @@
     async function runInference(X) {
         try {
             // create a new session and load the specific model.
-            document.getElementById('results').innerHTML = "Loading SIMS model...";
-            console.log("Loading SIMS model...");
+            document.getElementById('results').innerHTML = "Loading model...";
+            console.log("Loading model...");
             const session = await ort.InferenceSession.create('data/sims.onnx');
 
             // feed inputs and run
@@ -108,7 +108,7 @@
         const reader = new FileReader();
         reader.onload = async (event) => {
             // Read file and write back to browser file system for h5wasm to parse
-            document.getElementById('results').innerHTML = "Reading h5ad file...";
+            document.getElementById('results').innerHTML = "Reading file...";
             const binaryData = event.target.result;
             FS.writeFile("temp.h5ad", new Uint8Array(binaryData));
 
