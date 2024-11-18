@@ -5,20 +5,26 @@ Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](h
 [index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) that opens an h5ad in the browser and prints the raw predictions for the first cell out.
 
 # Running
-Export a SIMS checkpoint to an onnx file and list of genes
+Export a SIMS checkpoint to an onnx file and list of genes. Note this assumes you have the SIMS repo as a peer to this one so it can load the model definition.
 ```
-python sims-to-onnx.py models/11A_2organoids.ckpt
+python sims-to-onnx.py models/default.ckpt
+```
+
+Check the model for compatibility with onnx
+```
+python -m onnxruntime.tools.check_onnx_model_mobile_usability --log_level debug models/default.ckpt
+```
+
+Serve the web app and models locally
+```
+python -m http.server 3000
 ```
 
 # Functional Experiments 
 
-[h5ad.html](h5ad.html) demonstrates reading an h5ad file over http and using h5wasm in the browser and extracting the gene names and expression matrix values. Must be served locally to comply with CORS. An actual implimentation would present an open file dialog to read a file locally.
-
-[sims-to-onnx.py](sims-to-onnx.py) exports a SIMS checkpoint as an onnx file along with a text list of the genes it expects as input. Note this assumes you have the SIMS repo as a peer to this one so it can load the model definition.
+[h5ad.html](h5ad.html) demonstrates reading an h5ad file over http and using h5wasm in the browser and extracting the gene names and expression matrix values. Must be served locally to comply with CORS. An actual implementation would present an open file dialog to read a file locally.
 
 [onnx.html](onnx.html) demonstrates loading the sims.onnx file in the browser and running forward inference on a sample zero tensor.
-
-[index.html](index.html) puts these functional steps together towards a basic MVP
 
 # References
 [h5wasm](https://github.com/usnistgov/h5wasm)

@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/css/bootstrap.min.css"
         integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
     <!-- ONNX Web WASM Runtime-->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <title>SIMS Web</title>
 </head>
 
@@ -15,16 +14,13 @@
     <div class="container">
         <div class="row">
             <div class="col">
-
                 <div class="mb-3 mt-3">
-
                     <h2 class="mb-3" style="font-weight: 300">SIMS Web </h2>
-
                     <div class="form-group mb-3">
                         <div class="custom-file">
                             <input type="file" class="custom-file-input" name="file_input" id="file_input"
                                 accept=".h5ad">
-                            <label id="file_input_label" class="custom-file-label" for="image">Select an Anndata/Scanpy
+                            <label id="file_input_label" class="custom-file-label" for="image">Select an AnnData/Scanpy
                                 (.h5ad) file</label>
                         </div>
                     </div>
@@ -46,93 +42,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/js/bootstrap.min.js"
         integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k"
         crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <script type="module" src="index.js"></script>
 </body>
-
-<script type="module">
-    document.getElementById("file_input").addEventListener("input", function (event) {
-        document.getElementById("file_input_label").innerText = event.target.files[0].name;
-    });
-
-    async function extractAndInflateCellXGene(annData) {
-        document.getElementById('results').innerHTML = "Fetching gene list...";
-        let response = await fetch("data/genes.txt");
-        let text = await response.text();
-        let allGenes = text.split("\n");
-        console.log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0, 10)}...`);
-
-        // prepare inputs. a tensor need its corresponding TypedArray as data
-        document.getElementById('results').innerHTML = "Inflating genes...";
-        const batchSize = 8;
-        const X = new ort.Tensor('float32', new Float32Array(batchSize * allGenes.length), [batchSize, allGenes.length]);
-
-        let sampleGenes = annData.get("var/index").value;
-        let sampleExpression = annData.get("X").value;
-
-        // Populate the tensor with the first batch of cells
-        for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-            let geneIndexInAllGenes = allGenes.indexOf(sampleGenes[geneIndex]);
-            for (let cellIndex = 0; cellIndex < batchSize; cellIndex++) {
-                X.data[cellIndex * allGenes.length + geneIndexInAllGenes] =
-                    sampleExpression[cellIndex * sampleGenes.length + geneIndex];
-            }
-        }
-        console.log("Populated X tensor");
-        console.log(`X Cell 0 Expression #44: ${X.cpuData[44]}...`);
-        return X
-    }
-
-    async function runInference(X) {
-        try {
-            // create a new session and load the specific model.
-            document.getElementById('results').innerHTML = "Loading model...";
-            console.log("Loading model...");
-            const session = await ort.InferenceSession.create('data/sims.onnx');
-
-            // feed inputs and run
-            document.getElementById('results').innerHTML = "Running inference...";
-            console.log("Running inference...");
-            const results = await session.run({ "input.1": X });
-            console.log(`Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}`);
-            return results;
-        } catch (e) {
-            console.log(`Failed to inference ONNX model: ${e}.`);
-        }
-    }
-
-    import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
-    const { FS } = await h5wasm.ready;
-    console.log("h5wasm loaded");
-
-    document.getElementById('upload_btn').addEventListener('click', async (event) => {
-        const file = document.getElementById('file_input').files[0];
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            // Read file and write back to browser file system for h5wasm to parse
-            document.getElementById('results').innerHTML = "Reading file...";
-            const binaryData = event.target.result;
-            FS.writeFile("temp.h5ad", new Uint8Array(binaryData));
-
-            let annData = new h5wasm.File("temp.h5ad", "r");
-            console.log(`Top level keys: ${annData.keys()}`);
-            console.log(`X shape: ${annData.get("X").shape}`);
-            console.log(`X genes: ${annData.get("var/index").value.slice(0, 10)}...`);
-            console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
-
-            let X = await extractAndInflateCellXGene(annData);
-            let results = await runInference(X);
-            let pred = results["826"].cpuData;
-            let output = document.getElementById('results');
-            output.innerHTML = '<ul class="list-group">';
-            for (let i = 0; i < 8; i++) {
-                output.innerHTML += `<li class="list-group-item">${pred[i]}</li>`
-            }
-            output.innerHTML += '</ul>'
-
-        };
-        if (file) {
-            reader.readAsArrayBuffer(file);
-        }
-    });
-</script>
 
 </html>

@@ -1,12 +1,6 @@
 import argparse
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import scanpy as sc
-import torch
-import gc
-
 import sys
+import torch
 
 # Assumes you have the SIMS repo as a peer to this one...
 sys.path.insert(0, "../SIMS")
@@ -38,6 +32,6 @@ if __name__ == "__main__":
     print(f"Exported model to {model_path}/{model_name}.onnx")
 
     # Write out the list of genes corresponding to the models input
-    with open(f"{model_path}/{model_name}.genes.txt", "w") as f:
+    with open(f"{model_path}/{model_name}.genes", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
-    print(f"Wrote out gene list to {model_path}/{model_name}.genes.txt")
+    print(f"Wrote out gene list to {model_path}/{model_name}.genes")
