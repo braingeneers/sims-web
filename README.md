@@ -1,8 +1,14 @@
 # sims-web
-Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [ONNX](https://onnxruntime.ai/) and [h5wasm](https://github.com/usnistgov/h5wasm)
+Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](https://github.com/usnistgov/h5wasm) to read local AnnData (.h5ad) files and [ONNX](https://onnxruntime.ai/) to run the model on CPU or GPU if available.
 
 # Demo
 [index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) that opens an h5ad in the browser and prints the raw predictions for the first cell out.
+
+# Running
+Export a SIMS checkpoint to an onnx file and list of genes
+```
+python sims-to-onnx.py models/11A_2organoids.ckpt
+```
 
 # Functional Experiments 
 

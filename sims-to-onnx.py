@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,17 +15,29 @@ from scsims import SIMS
 import torch.onnx
 
 if __name__ == "__main__":
-    # Load the checkpoint
-    sims = SIMS(
-        weights_path="data/11A_2organoids.ckpt", map_location=torch.device("cpu")
-    )
+    parser = argparse.ArgumentParser(description="Export a SIMS model to ONNX")
+    parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
+    args = parser.parse_args()
 
-    # Save the model as an ONNX - note constant batch size at this point
-    batch_size = 8
-    sims.model.to_onnx("data/sims.onnx", torch.zeros(batch_size, 33694), export_params=True)
-    print("Wrote out ONNX model")
+    # Load the checkpoint
+    print("Loading model...")
+    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"))
+    model_name = args.checkpoint.split("/")[-1].split(".")[0]
+    model_path = "/".join(args.checkpoint.split("/")[:-1])
+    num_genes = len(sims.model.genes)
+    print(f"Loaded model {model_name} with {num_genes} genes")
+
+    # Export model to ONNX file
+    # wrt batch size https://github.com/microsoft/onnxruntime/issues/19452#issuecomment-1947799229
+    batch_size = 1
+    sims.model.to_onnx(
+        f"{model_path}/{model_name}.onnx",
+        torch.zeros(batch_size, num_genes),
+        export_params=True,
+    )
+    print(f"Exported model to {model_path}/{model_name}.onnx")
 
     # Write out the list of genes corresponding to the models input
-    with open("data/genes.txt", "w") as f:
+    with open(f"{model_path}/{model_name}.genes.txt", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
-    print("Wrote out gene list")
+    print(f"Wrote out gene list to {model_path}/{model_name}.genes.txt")
