@@ -9,23 +9,40 @@ async function getListOfFileNamesExcludingSuffix(path) {
         const doc = parser.parseFromString(text, 'text/html');
         const fileElements = doc.querySelectorAll('a'); // Assuming file names are in <a> tags
         const fileNames = Array.from(fileElements).map(el => el.textContent.trim());
-        return fileNames.filter(name => name !== '');
+        const fileRoots = fileNames.map(name => name.split('.').slice(0, -1).join('.'));
+        const uniqueFileRoots = [...new Set(fileRoots)];
+        return uniqueFileRoots.filter(name => name !== '');
     } catch (error) {
         console.error('Error fetching files:', error);
         return [];
     }
 }
 
-async function extractAndInflateCellXGene(annData) {
+async function populateModelSelect(models) {
+    const fileSelect = document.getElementById('model_select');
+    fileSelect.innerHTML = ''; // Clear existing options
+    models.forEach(file => {
+        const option = document.createElement('option');
+        option.value = file;
+        option.textContent = file;
+        fileSelect.appendChild(option);
+    });
+}
+
+async function getGeneListFromServer(modelName) {
+    const response = await fetch(`models/${modelName}.genes`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return (await response.text()).split('\n');
+}
+
+async function extractAndInflateCellXGene(annData, allGenes) {
     document.getElementById('results').innerHTML = "Fetching gene list...";
-    let response = await fetch("data/genes.txt");
-    let text = await response.text();
-    let allGenes = text.split("\n");
-    console.log(`Loaded ${allGenes.length} Genes: ${allGenes.slice(0, 10)}...`);
 
     // prepare inputs. a tensor need its corresponding TypedArray as data
     document.getElementById('results').innerHTML = "Inflating genes...";
-    const batchSize = 8;
+    const batchSize = 1;
     const X = new ort.Tensor('float32', new Float32Array(batchSize * allGenes.length), [batchSize, allGenes.length]);
 
     let sampleGenes = annData.get("var/index").value;
@@ -44,13 +61,8 @@ async function extractAndInflateCellXGene(annData) {
     return X
 }
 
-async function runInference(X) {
+async function runInference(session, X) {
     try {
-        // create a new session and load the specific model.
-        document.getElementById('results').innerHTML = "Loading model...";
-        console.log("Loading model...");
-        const session = await ort.InferenceSession.create('data/sims.onnx');
-
         // feed inputs and run
         document.getElementById('results').innerHTML = "Running inference...";
         console.log("Running inference...");
@@ -62,6 +74,9 @@ async function runInference(X) {
     }
 }
 
+let modelNames = await getListOfFileNamesExcludingSuffix("models")
+populateModelSelect(modelNames);
+
 document.getElementById("file_input").addEventListener("input", function (event) {
     document.getElementById("file_input_label").innerText = event.target.files[0].name;
 });
@@ -70,7 +85,20 @@ import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.j
 const { FS } = await h5wasm.ready;
 console.log("h5wasm loaded");
 
+let currentModelName = null;
+let currentModelGenes = null;
+let currentModelSession = null;
+
 document.getElementById('upload_btn').addEventListener('click', async (event) => {
+    // Load the model
+    let selectedModelName = document.getElementById('model_select').value;
+    if (selectedModelName !== currentModelName) {
+        document.getElementById('results').innerHTML = "Loading model...";
+        currentModelName = selectedModelName;
+        currentModelGenes = await getGeneListFromServer(currentModelName);
+        currentModelSession = await ort.InferenceSession.create(`models/${currentModelName}.onnx`);
+    }
+
     const file = document.getElementById('file_input').files[0];
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -85,8 +113,8 @@ document.getElementById('upload_btn').addEventListener('click', async (event) =>
         console.log(`X genes: ${annData.get("var/index").value.slice(0, 10)}...`);
         console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
 
-        let X = await extractAndInflateCellXGene(annData);
-        let results = await runInference(X);
+        let X = await extractAndInflateCellXGene(annData, currentModelGenes);
+        let results = await runInference(currentModelSession, X);
         let pred = results["826"].cpuData;
         let output = document.getElementById('results');
         output.innerHTML = '<ul class="list-group">';
