@@ -37,40 +37,37 @@ async function getGeneListFromServer(modelName) {
     return (await response.text()).split('\n');
 }
 
-async function extractAndInflateCellXGene(annData, allGenes) {
-    document.getElementById('results').innerHTML = "Fetching gene list...";
-
-    // prepare inputs. a tensor need its corresponding TypedArray as data
-    document.getElementById('results').innerHTML = "Inflating genes...";
-    const batchSize = 1;
-    const X = new ort.Tensor('float32', new Float32Array(batchSize * allGenes.length), [batchSize, allGenes.length]);
-
-    let sampleGenes = annData.get("var/index").value;
-    let sampleExpression = annData.get("X").value;
-
-    // Populate the tensor with the first batch of cells
-    for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-        let geneIndexInAllGenes = allGenes.indexOf(sampleGenes[geneIndex]);
-        for (let cellIndex = 0; cellIndex < batchSize; cellIndex++) {
-            X.data[cellIndex * allGenes.length + geneIndexInAllGenes] =
-                sampleExpression[cellIndex * sampleGenes.length + geneIndex];
-        }
-    }
-    console.log("Populated X tensor");
-    console.log(`X Cell 0 Expression #44: ${X.cpuData[44]}...`);
-    return X
-}
-
-async function runInference(session, X) {
+async function extractAndInflateCellXGeneAndRunInference(annData, allGenes, session) {
     try {
-        // feed inputs and run
-        document.getElementById('results').innerHTML = "Running inference...";
-        console.log("Running inference...");
-        const results = await session.run({ "input.1": X });
-        console.log(`Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}`);
-        return results;
-    } catch (e) {
-        console.log(`Failed to inference ONNX model: ${e}.`);
+        const sampleGenes = annData.get('var/index').value;
+        const cellNames = annData.get('obs/index').value;
+        const sampleExpression = annData.get('X').value;
+
+        const combinedMatrix = [];
+
+        // for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
+        for (let cellIndex = 0; cellIndex < 100; cellIndex++) {
+
+            document.getElementById('results').innerHTML = `Processing cell ${cellIndex}...`;
+            const cellData = sampleExpression.slice(cellIndex * sampleGenes.length, (cellIndex + 1) * sampleGenes.length);
+            const inputTensor = new ort.Tensor('float32', new Float32Array(allGenes.length), [1, allGenes.length]);
+
+            // Populate the tensor with the first batch of cells
+            for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+                let geneIndexInAllGenes = allGenes.indexOf(sampleGenes[geneIndex]);
+                inputTensor.data[cellIndex * allGenes.length + geneIndexInAllGenes] =
+                    sampleExpression[cellIndex * sampleGenes.length + geneIndex];
+            }
+
+            const results = await session.run({ "input.1": inputTensor });
+            const output = results["826"].cpuData
+
+            combinedMatrix.push(output);
+        }
+
+        return combinedMatrix;
+    } catch (error) {
+        console.error('Error extracting, inflating, and running inference on cell x gene data:', error);
     }
 }
 
@@ -90,6 +87,9 @@ let currentModelGenes = null;
 let currentModelSession = null;
 
 document.getElementById('upload_btn').addEventListener('click', async (event) => {
+    let output = document.getElementById('results');
+    output.innerHTML = "";
+
     // Load the model
     let selectedModelName = document.getElementById('model_select').value;
     if (selectedModelName !== currentModelName) {
@@ -106,20 +106,18 @@ document.getElementById('upload_btn').addEventListener('click', async (event) =>
         document.getElementById('results').innerHTML = "Reading file...";
         const binaryData = event.target.result;
         FS.writeFile("temp.h5ad", new Uint8Array(binaryData));
-
         let annData = new h5wasm.File("temp.h5ad", "r");
         console.log(`Top level keys: ${annData.keys()}`);
         console.log(`X shape: ${annData.get("X").shape}`);
         console.log(`X genes: ${annData.get("var/index").value.slice(0, 10)}...`);
         console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
 
-        let X = await extractAndInflateCellXGene(annData, currentModelGenes);
-        let results = await runInference(currentModelSession, X);
-        let pred = results["826"].cpuData;
-        let output = document.getElementById('results');
-        output.innerHTML = '<ul class="list-group">';
+        const results = await extractAndInflateCellXGeneAndRunInference(annData, currentModelGenes,currentModelSession);
+
+        output.innerHTML = '<div>Cell 0 Raw Predictions</div>';
+        output.innerHTML += '<ul class="list-group">';
         for (let i = 0; i < 8; i++) {
-            output.innerHTML += `<li class="list-group-item">${pred[i]}</li>`
+            output.innerHTML += `<li class="list-group-item">${results[0][i]}</li>`
         }
         output.innerHTML += '</ul>'
 
