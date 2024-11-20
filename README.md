@@ -37,3 +37,5 @@ python -m http.server 3000
 [ONNX Runtime Web (WASM Backend)](https://onnxruntime.ai/docs/get-started/with-javascript/web.html)
 
 [ONNX Runtime Web Platform Functionality Details](https://www.npmjs.com/package/onnxruntime-web)
+
+[SIMS Streamlit App](https://sc-sims-app.streamlit.app/) and [Source](https://github.com/jesusgf1/sims_app/blob/main/streamlit_app.py)
