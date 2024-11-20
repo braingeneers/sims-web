@@ -36,13 +36,14 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
         worker.postMessage({ modelName, h5adFile});
 
         worker.onmessage = function(event) {
-            const { type, cellIndex, totalCells, combinedMatrix, error } = event.data;
+            const { type, countFinished, totalCells, combinedMatrix, elapsedTime, error } = event.data;
 
             if (type === 'progress') {
                 const progress = Math.round((event.data.countFinished / totalCells) * 100);
                 document.getElementById('progress-bar').style.width = `${progress}%`;
                 document.getElementById('progress-bar').textContent = `${progress}%`;
             } else if (type === 'result') {
+                document.getElementById('elapsed-time').textContent = `Elapsed Time: ${elapsedTime.toFixed(2)} minutes`;
                 resolve(combinedMatrix);
             } else if (type === 'error') {
                 reject(error);

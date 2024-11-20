@@ -33,13 +33,15 @@ self.onmessage = async function(event) {
         console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
         const sampleGenes = annData.get('var/index').value;
         // const cellNames = annData.get('obs/index').value;
-        const cellNames = annData.get('obs/index').value.slice(0, 10);
+        const cellNames = annData.get('obs/index').value.slice(0, 1000);
         const sampleExpression = annData.get('X').value;
 
         // Depending on the tensor to be zero, and that each cell inflates the same genes
         const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
         const combinedMatrix = [];
+
+        const startTime = Date.now(); // Record start time
 
         for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
 
@@ -60,8 +62,11 @@ self.onmessage = async function(event) {
             self.postMessage({ type: 'progress', countFinished, totalCells: cellNames.length });
         }
 
+        const endTime = Date.now(); // Record end time
+        const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
+
         // Post final result
-        self.postMessage({ type: 'result', combinedMatrix });
+        self.postMessage({ type: 'result', combinedMatrix, elapsedTime });
     } catch (error) {
         self.postMessage({ type: 'error', error: error.message });
     }
