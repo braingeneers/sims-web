@@ -14,9 +14,10 @@ self.onmessage = async function(event) {
         const currentModelGenes = (await response.text()).split('\n');
 
         // Load the model
+        const dir = location.href.substring(0, location.href.lastIndexOf('/')) + "/";
         ort.env.wasm.wasmPaths = {
-            wasm: `${location.origin}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm`,
-            mjs: `${location.origin}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs`
+            wasm: `${dir}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm`,
+            mjs: `${dir}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs`
         };
         const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`);
 
