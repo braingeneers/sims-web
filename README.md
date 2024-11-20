@@ -30,7 +30,7 @@ python -m http.server 3000
 # References
 [h5wasm](https://github.com/usnistgov/h5wasm)
 
-[anndata/h5ad file struction](https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html)
+[anndata/h5ad file structure](https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html)
 
 [Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 

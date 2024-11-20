@@ -64,14 +64,42 @@ document.getElementById("file_input").addEventListener("input", function (event)
     document.getElementById("file_input_label").innerText = event.target.files[0].name;
 });
 
-import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
-const { FS } = await h5wasm.ready;
-console.log("h5wasm loaded");
+
+// DEBUGING
+// If localhost then fill in a remote file so we can just hit enter vs. selecting each reload
+if (location.host === "localhost:3000") {
+    async function urlToFile(url, fileName) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: blob.type });
+        return file;
+    }
+
+    const fileUrl = 'http://localhost:3000/data/pbmc3k.h5ad'; // Replace with actual file URL
+    const fileName = 'pbmc3k.h5ad'; // Replace with desired file name
+
+    try {
+        const file = await urlToFile(fileUrl, fileName);
+        console.log('File:', file);
+
+        // You can now use this file as if it was selected from an HTML input element
+        // For example, you can set it to an input element
+        const fileInput = document.getElementById('file_input');
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+
+        // Update the label to show the file name
+        document.getElementById('file_input_label').innerText = file.name;
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
 
 let currentModelName = null;
 let currentModelGenes = null;
 let currentModelSession = null;
-document.getElementById('upload_btn').addEventListener('click', async (event) => {
+document.getElementById('predict_btn').addEventListener('click', async (event) => {
 
     let selectedModelName = document.getElementById('model_select').value;
 

@@ -29,12 +29,12 @@ self.onmessage = async function(event) {
         console.log(annData);
 
         console.log(`Top level keys: ${annData.keys()}`);
-        console.log(`X shape: ${annData.get("X").shape}`);
-        console.log(`X genes: ${annData.get("var/index").value.slice(0, 10)}...`);
-        console.log(`X cell 0 First 10 expression values: ${annData.get("X").value.slice(0, 10)}...`);
-        const sampleGenes = annData.get('var/index').value;
-        // const cellNames = annData.get('obs/index').value;
-        const cellNames = annData.get('obs/index').value.slice(0, 1000);
+        let cellNames = annData.get('obs').type == 'Dataset' ? 
+            annData.get('obs').value.map((e) => e[0]) : annData.get('obs/index').value;
+        if (location.host === "localhost:3000") cellNames = cellNames.slice(0, 10)
+        cellNames = cellNames.slice(0, 10)
+        const sampleGenes = annData.get('var').type == 'Dataset' ? 
+            annData.get('var').value.map((e) => e[0]) : annData.get('var/index').value;
         const sampleExpression = annData.get('X').value;
 
         // Depending on the tensor to be zero, and that each cell inflates the same genes
