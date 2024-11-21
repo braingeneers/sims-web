@@ -13,6 +13,7 @@ self.onmessage = async function(event) {
         }
         const currentModelGenes = (await response.text()).split('\n');
 
+
         // Load the model
         const dir = location.href.substring(0, location.href.lastIndexOf('/')) + "/";
         ort.env.wasm.wasmPaths = {
@@ -37,19 +38,19 @@ self.onmessage = async function(event) {
             annData.get('var').value.map((e) => e[0]) : annData.get('var/index').value;
         const sampleExpression = annData.get('X').value;
 
-        // Depending on the tensor to be zero, and that each cell inflates the same genes
-        const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
+        // Depends on the tensor to be zero, and that each cell inflates the same genes
+        let inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
         const combinedMatrix = [];
 
         const startTime = Date.now(); // Record start time
 
         for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
+            // const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
-            // Populate the tensor with the first batch of cells
             for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
                 let geneIndexInAllGenes = currentModelGenes.indexOf(sampleGenes[geneIndex]);
-                inputTensor.data[cellIndex * currentModelGenes.length + geneIndexInAllGenes] =
+                inputTensor.data[geneIndexInAllGenes] =
                     sampleExpression[cellIndex * sampleGenes.length + geneIndex];
             }
 
@@ -67,7 +68,7 @@ self.onmessage = async function(event) {
         const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
         // Post final result
-        self.postMessage({ type: 'result', combinedMatrix, elapsedTime });
+        self.postMessage({ type: 'result', cellNames, combinedMatrix, elapsedTime });
     } catch (error) {
         self.postMessage({ type: 'error', error: error.message });
     }

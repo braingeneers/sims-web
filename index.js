@@ -36,7 +36,7 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
         worker.postMessage({ modelName, h5adFile});
 
         worker.onmessage = function(event) {
-            const { type, countFinished, totalCells, combinedMatrix, elapsedTime, error } = event.data;
+            const { type, countFinished, totalCells, cellNames, combinedMatrix, elapsedTime, error } = event.data;
 
             if (type === 'progress') {
                 const progress = Math.round((event.data.countFinished / totalCells) * 100);
@@ -44,7 +44,7 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
                 document.getElementById('progress-bar').textContent = `${progress}%`;
             } else if (type === 'result') {
                 document.getElementById('elapsed-time').textContent = `Elapsed Time: ${elapsedTime.toFixed(2)} minutes`;
-                resolve(combinedMatrix);
+                resolve([cellNames, combinedMatrix]);
             } else if (type === 'error') {
                 reject(error);
             }
@@ -55,7 +55,6 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
         };
     });
 }
-
 
 let modelNames = await getListOfFileNamesExcludingSuffix("models")
 populateModelSelect(modelNames);
@@ -96,26 +95,97 @@ if (location.host === "localhost:3000") {
     }
 }
 
-let currentModelName = null;
-let currentModelGenes = null;
-let currentModelSession = null;
+function outputResults(cellNames, combinedMatrix, predictionClasses) {
+    const resultsContainer = document.getElementById('results');
+    resultsContainer.innerHTML = ''; // Clear previous results
+
+    const table = document.createElement('table');
+    table.classList.add('table', 'table-striped');
+
+    // Create table header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const cellHeader = document.createElement('th');
+    cellHeader.textContent = 'Cell';
+    headerRow.appendChild(cellHeader);
+
+    const classHeader = document.createElement('th');
+    classHeader.textContent = 'Class';
+    headerRow.appendChild(classHeader);
+
+    for (let i = 0; i < 8; i++) {
+        const outputHeader = document.createElement('th');
+        outputHeader.textContent = `Output ${i + 1}`;
+        headerRow.appendChild(outputHeader);
+    }
+
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Create table body
+    const tbody = document.createElement('tbody');
+
+    cellNames.forEach((cellName, cellIndex) => {
+        const row = document.createElement('tr');
+        const cellNameCell = document.createElement('td');
+        cellNameCell.textContent = cellName;
+        row.appendChild(cellNameCell);
+
+        const outputValues = combinedMatrix[cellIndex];
+        const maxIndex = indexOfMax(outputValues);
+        const classLabel = predictionClasses[maxIndex];
+        const classCell = document.createElement('td');
+        classCell.textContent = classLabel;
+        row.appendChild(classCell);
+
+        outputValues.forEach((value, index) => {
+            const outputCell = document.createElement('td');
+            outputCell.textContent = value.toFixed(4); // Format to 4 decimal places
+            row.appendChild(outputCell);
+        });
+
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    resultsContainer.appendChild(table);
+}
+
+function indexOfMax(arr) {
+    if (arr.length === 0) {
+        return -1;
+    }
+
+    let max = arr[0];
+    let maxIndex = 0;
+
+    for (let i = 1; i < arr.length; i++) {
+        if (arr[i] > max) {
+            maxIndex = i;
+            max = arr[i];
+        }
+    }
+
+    return maxIndex;
+}
+
 document.getElementById('predict_btn').addEventListener('click', async (event) => {
 
     let selectedModelName = document.getElementById('model_select').value;
 
     const h5AdFile = document.getElementById('file_input').files[0];
 
+    // Load the model classes
+    const response = await fetch(`models/${selectedModelName}.classes`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const selectedModelClasses = (await response.text()).split('\n');
+
     try {
-        const combinedMatrix = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile);
+        const [cellNames, combinedMatrix] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile);
         console.log('Combined Matrix:', combinedMatrix);
-        let output = document.getElementById('results');
-        output.innerHTML = "";
-        output.innerHTML = '<div>Cell 0 Raw Predictions</div>';
-        output.innerHTML += '<ul class="list-group">';
-        for (let i = 0; i < 8; i++) {
-            output.innerHTML += `<li class="list-group-item">${combinedMatrix[0][i]}</li>`
-        }
-        output.innerHTML += '</ul>'
+        outputResults(cellNames, combinedMatrix, selectedModelClasses);
     } catch (error) {
         console.error('Error:', error);
     }

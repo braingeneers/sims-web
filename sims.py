@@ -16,11 +16,9 @@ import torch.onnx
 
 if __name__ == "__main__":
     # Load the checkpoint
-    sims = SIMS(
-        weights_path="data/11A_2organoids.ckpt", map_location=torch.device("cpu")
-    )
+    sims = SIMS(weights_path="models/default.ckpt", map_location=torch.device("cpu"))
 
-    test_tensor = torch.zeros(8, 33694)
+    test_tensor = torch.zeros(1, 33694)
     for i in range(100):
         test_tensor[0, i] = 0.5
 
@@ -31,13 +29,13 @@ if __name__ == "__main__":
     print(results[0][0])
 
     # Try onnx
-    session = onnxruntime.InferenceSession("data/sims.onnx")
+    session = onnxruntime.InferenceSession("models/default.onnx")
     outputs = session.run(None, {"input.1": test_tensor.numpy()})
     print("onnx session run output")
     print(outputs[0][0])
 
     # Load the dataset
-    adata = sc.read_h5ad("data/pbmc3k_processed.h5ad")
+    adata = sc.read_h5ad("data/pbmc3k.h5ad")
     loader = sims.model._parse_data(adata)
     print("Cell 0 #44 Expression", loader.dataset.data[0, 44])
 

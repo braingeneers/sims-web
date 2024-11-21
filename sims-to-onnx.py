@@ -35,3 +35,8 @@ if __name__ == "__main__":
     with open(f"{model_path}/{model_name}.genes", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
     print(f"Wrote out gene list to {model_path}/{model_name}.genes")
+
+    # Write out the class labels for the model
+    with open(f"{model_path}/{model_name}.classes", "w") as f:
+        f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
+    print(f"Wrote out classes to {model_path}/{model_name}.classes")
