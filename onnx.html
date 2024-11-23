@@ -19,6 +19,7 @@
         try {
             // create a new session and load the specific model.
             console.log('loading model');
+            ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
             const session = await ort.InferenceSession.create('models/default.onnx',
                 { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
             );

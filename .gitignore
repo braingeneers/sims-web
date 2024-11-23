@@ -1,12 +1,9 @@
 /venv   
 /data
 /models
-/dist
-/node_modules
 
 .DS_Store
 
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class

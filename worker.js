@@ -1,4 +1,4 @@
-self.importScripts("https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js", "dist/h5wasm/iife/h5wasm.js");
+self.importScripts("https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js", "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js");
 
 
 self.onmessage = async function(event) {
@@ -13,13 +13,8 @@ self.onmessage = async function(event) {
         }
         const currentModelGenes = (await response.text()).split('\n');
 
-
         // Load the model
-        const dir = location.href.substring(0, location.href.lastIndexOf('/')) + "/";
-        ort.env.wasm.wasmPaths = {
-            wasm: `${dir}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm`,
-            mjs: `${dir}/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs`
-        };
+        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
         const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`);
 
         // Load the h5file
