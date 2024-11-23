@@ -13,28 +13,38 @@
 </body>
 <script type="module">
     async function main() {
+        ort.env.debug = true;
+        ort.env.logLevel = 'verbose';
+        ort.env.trace = true;
         try {
             // create a new session and load the specific model.
-            const session = await ort.InferenceSession.create('data/sims.onnx');
+            console.log('loading model');
+            const session = await ort.InferenceSession.create('models/default.onnx',
+                { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
+            );
             console.log('sims model loaded');
+            ort.env.debug = true;
+            ort.env.logLevel = 'verbose';
+            ort.env.trace = true;
+            console.log('output names', session.outputNames);
 
             // prepare inputs. a tensor need its corresponding TypedArray as data
-            const batch_size = 8;
-            const X = new ort.Tensor('float32', new Float32Array(batch_size*33694), [batch_size, 33694]); 
+            const batch_size = 1;
+            const X = new ort.Tensor('float32', new Float32Array(batch_size * 33694), [batch_size, 33694]);
             for (let i = 0; i < 100; i++) {
                 X.data[i] = 0.5;
             }
 
             // feed inputs and run
-            const results = await session.run({"input.1": X});
+            const results = await session.run({ "input.1": X });
             console.log('inference done');
             console.log(results);
-            document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0,8)}</div>`);
+            document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);
         } catch (e) {
             document.write(`failed to inference ONNX model: ${e}.`);
         }
     }
     main();
-    console.log('done');
 </script>
+
 </html>

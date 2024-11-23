@@ -3,6 +3,7 @@ torchvision
 
 onnx
 onnxruntime
+sclblonnx
 
 ipython
 

@@ -38,4 +38,6 @@ python -m http.server 3000
 
 [ONNX Runtime Web Platform Functionality Details](https://www.npmjs.com/package/onnxruntime-web)
 
+[ONNX Runtime Javascript Examples](https://github.com/microsoft/onnxruntime-inference-examples/tree/main/js)
+
 [SIMS Streamlit App](https://sc-sims-app.streamlit.app/) and [Source](https://github.com/jesusgf1/sims_app/blob/main/streamlit_app.py)
