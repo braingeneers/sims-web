@@ -36,15 +36,15 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
         worker.postMessage({ modelName, h5adFile});
 
         worker.onmessage = function(event) {
-            const { type, countFinished, totalCells, cellNames, combinedMatrix, elapsedTime, error } = event.data;
+            const { type, countFinished, totalCells, cellNames, predictions, elapsedTime, error } = event.data;
 
             if (type === 'progress') {
-                const progress = Math.round((event.data.countFinished / totalCells) * 100);
+                const progress = Math.round((countFinished / totalCells) * 100);
                 document.getElementById('progress-bar').style.width = `${progress}%`;
                 document.getElementById('progress-bar').textContent = `${progress}%`;
             } else if (type === 'result') {
-                document.getElementById('elapsed-time').textContent = `Elapsed Time: ${elapsedTime.toFixed(2)} minutes`;
-                resolve([cellNames, combinedMatrix]);
+                document.getElementById('elapsed-time').textContent = `${totalCells} cells in ${elapsedTime.toFixed(2)} minutes`;
+                resolve([cellNames, predictions]);
             } else if (type === 'error') {
                 reject(error);
             }
@@ -95,7 +95,7 @@ if (location.host === "localhost:3000") {
     }
 }
 
-function outputResults(cellNames, combinedMatrix, predictionClasses) {
+function outputResults(cellNames, predictions, predictionClasses) {
     const resultsContainer = document.getElementById('results');
     resultsContainer.innerHTML = ''; // Clear previous results
 
@@ -113,11 +113,9 @@ function outputResults(cellNames, combinedMatrix, predictionClasses) {
     classHeader.textContent = 'Class';
     headerRow.appendChild(classHeader);
 
-    for (let i = 0; i < 8; i++) {
-        const outputHeader = document.createElement('th');
-        outputHeader.textContent = `Output ${i + 1}`;
-        headerRow.appendChild(outputHeader);
-    }
+    const confidenceHeader = document.createElement('th');
+    confidenceHeader.textContent = 'Confidence';
+    headerRow.appendChild(confidenceHeader);
 
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -127,22 +125,18 @@ function outputResults(cellNames, combinedMatrix, predictionClasses) {
 
     cellNames.forEach((cellName, cellIndex) => {
         const row = document.createElement('tr');
+
         const cellNameCell = document.createElement('td');
         cellNameCell.textContent = cellName;
         row.appendChild(cellNameCell);
 
-        const outputValues = combinedMatrix[cellIndex];
-        const maxIndex = indexOfMax(outputValues);
-        const classLabel = predictionClasses[maxIndex];
         const classCell = document.createElement('td');
-        classCell.textContent = classLabel;
+        classCell.textContent = predictionClasses[predictions[cellIndex][0]];
         row.appendChild(classCell);
 
-        outputValues.forEach((value, index) => {
-            const outputCell = document.createElement('td');
-            outputCell.textContent = value.toFixed(4); // Format to 4 decimal places
-            row.appendChild(outputCell);
-        });
+        const classSoftmax = document.createElement('td');
+        classSoftmax.textContent = predictions[cellIndex][1].toFixed(4);
+        row.appendChild(classSoftmax);
 
         tbody.appendChild(row);
     });
@@ -183,9 +177,9 @@ document.getElementById('predict_btn').addEventListener('click', async (event) =
     const selectedModelClasses = (await response.text()).split('\n');
 
     try {
-        const [cellNames, combinedMatrix] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile);
-        console.log('Combined Matrix:', combinedMatrix);
-        outputResults(cellNames, combinedMatrix, selectedModelClasses);
+        const [cellNames, predictions] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile);
+        console.log('Predictions', predictions);
+        outputResults(cellNames, predictions, selectedModelClasses);
     } catch (error) {
         console.error('Error:', error);
     }

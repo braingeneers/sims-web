@@ -41,7 +41,7 @@ self.onmessage = async function(event) {
         // Depends on the tensor to be zero, and that each cell inflates the same genes
         let inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
-        const combinedMatrix = [];
+        const predictions = [];
 
         const startTime = Date.now(); // Record start time
 
@@ -54,10 +54,12 @@ self.onmessage = async function(event) {
                     sampleExpression[cellIndex * sampleGenes.length + geneIndex];
             }
 
-            const results = await currentModelSession.run({ "input.1": inputTensor });
-            const output = results["826"].cpuData
+            const output = await currentModelSession.run({ "input.1": inputTensor });
+            console.log(`${cellNames[cellIndex]} logits: ${output["826"].cpuData}`);
 
-            combinedMatrix.push(output);
+            const argMax = Number(output["argmax"].cpuData[0]);
+            const softmax = output["softmax"].cpuData[argMax];
+            predictions.push([argMax, softmax]);
 
             // Post progress update
             const countFinished = cellIndex + 1;
@@ -68,7 +70,7 @@ self.onmessage = async function(event) {
         const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
         // Post final result
-        self.postMessage({ type: 'result', cellNames, combinedMatrix, elapsedTime });
+        self.postMessage({ type: 'result', totalCells: cellNames.length, cellNames, predictions, elapsedTime });
     } catch (error) {
         self.postMessage({ type: 'error', error: error.message });
     }
