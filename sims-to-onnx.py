@@ -42,43 +42,28 @@ if __name__ == "__main__":
     # g = so.rename_output(g, "826", "logits")
     # so.list_outputs(g)
 
-    # Add softmax computation to the ONNX model
-    # g = so.graph_from_file(f"{model_path}/{model_name}.onnx")
-    # g = so.clean(g)
-    # so.check(g)
-    # so.display(g)
-    # so.list_inputs(g)
-    # so.list_outputs(g)
-
+    # Modify the model to add an ArgMax and Softmax output
     n1 = so.node("ArgMax", inputs=["826"], outputs=["argmax"], keepdims=0, axis=1)
     g = so.add_node(g, n1)
     g = so.add_output(g, "argmax", "INT64", [1])
 
-    # n1 = so.node("Abs", inputs=["826"], outputs=["softmax"])
-    # g = so.add_node(g, n1)  # Note, this adds the node, but the output is still "output"
-    # g = so.add_output(
-    #     g, "softmax", "FLOAT", [1]
-    # )  # Add the new output (for testing only)
-    # so.list_outputs(g)
+    n2 = so.node("Softmax", inputs=["826"], outputs=["softmax"], axis=1)
+    g = so.add_node(g, n2)
+    g = so.add_output(g, "softmax", "FLOAT", [1, 8])
 
     print("New outputs")
     so.list_outputs(g)
+
+    # Save the modified ONNX model
     onnx.save(model, f"{model_path}/{model_name}.onnx")
+    print(f"Saved modified model to {model_path}/{model_name}.onnx")
 
-    # Save the modified ONNX model
-    # so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
+    # Write out the list of genes corresponding to the models input
+    with open(f"{model_path}/{model_name}.genes", "w") as f:
+        f.write("\n".join(map(str, sims.model.genes)))
+    print(f"Wrote out gene list to {model_path}/{model_name}.genes")
 
-    # Save the modified ONNX model
-    # modified_onnx_model_path = f"{model_path}/{model_name}.onnx"
-    # onnx.save(model, modified_onnx_model_path)
-    # print(f"Exported modified model with softmax to {modified_onnx_model_path}")
-
-    # # Write out the list of genes corresponding to the models input
-    # with open(f"{model_path}/{model_name}.genes", "w") as f:
-    #     f.write("\n".join(map(str, sims.model.genes)))
-    # print(f"Wrote out gene list to {model_path}/{model_name}.genes")
-
-    # # Write out the class labels for the model
-    # with open(f"{model_path}/{model_name}.classes", "w") as f:
-    #     f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
-    # print(f"Wrote out classes to {model_path}/{model_name}.classes")
+    # Write out the class labels for the model
+    with open(f"{model_path}/{model_name}.classes", "w") as f:
+        f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
+    print(f"Wrote out classes to {model_path}/{model_name}.classes")
