@@ -15,7 +15,15 @@ self.onmessage = async function(event) {
 
         // Load the model
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-        const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`);
+        ort.env.debug = true;
+        ort.env.numThreads = 16;
+        ort.env.logLevel = 'verbose';
+        ort.env.trace = true;
+        const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`,
+            { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
+        );
+        console.log('sims model loaded');
+        console.log('output names', currentModelSession.outputNames);
 
         // Load the h5file
         FS.mkdir('/work');
@@ -27,8 +35,7 @@ self.onmessage = async function(event) {
         console.log(`Top level keys: ${annData.keys()}`);
         let cellNames = annData.get('obs').type == 'Dataset' ? 
             annData.get('obs').value.map((e) => e[0]) : annData.get('obs/index').value;
-        if (location.host === "localhost:3000") cellNames = cellNames.slice(0, 10)
-        cellNames = cellNames.slice(0, 10)
+        if (location.host === "localhost:3000") cellNames = cellNames.slice(0, 100)
         const sampleGenes = annData.get('var').type == 'Dataset' ? 
             annData.get('var').value.map((e) => e[0]) : annData.get('var/index').value;
         const sampleExpression = annData.get('X').value;
