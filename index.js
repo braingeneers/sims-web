@@ -94,18 +94,6 @@ if (location.host === "localhost:3000") {
     } catch (error) {
         console.error('Error:', error);
     }
-    // Set initial cell range percentage based on origin
-    const cellRangeSlider = document.getElementById('cellRange');
-    const initialValue = window.location.origin.includes('localhost') ? 1 : 100;
-    cellRangeSlider.value = initialValue;
-    document.getElementById('cellRangeValue').textContent = `${initialValue}%`; 
-
-    // Trigger input event to update display
-    const inputEvent = new Event('input', {
-        bubbles: true,
-        cancelable: true,
-    });
-    cellRangeSlider.dispatchEvent(inputEvent);
 }
 
 function outputResults(cellNames, predictions, predictionClasses) {
