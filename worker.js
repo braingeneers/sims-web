@@ -1,5 +1,7 @@
-self.importScripts("https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js", "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js");
-
+self.importScripts(
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
+    "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
+);
 
 self.onmessage = async function(event) {
     try {
@@ -14,6 +16,7 @@ self.onmessage = async function(event) {
         const currentModelGenes = (await response.text()).split('\n');
 
         // Load the model
+        console.log('Loading model..');
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
         ort.env.debug = true;
         ort.env.numThreads = 16;
@@ -22,8 +25,8 @@ self.onmessage = async function(event) {
         const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`,
             { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
         );
-        console.log('sims model loaded');
-        console.log('output names', currentModelSession.outputNames);
+        console.log('Model loaded');
+        console.log('Output names', currentModelSession.outputNames);
 
         // Load the h5file
         FS.mkdir('/work');
@@ -35,7 +38,9 @@ self.onmessage = async function(event) {
         console.log(`Top level keys: ${annData.keys()}`);
         let cellNames = annData.get('obs').type == 'Dataset' ? 
             annData.get('obs').value.map((e) => e[0]) : annData.get('obs/index').value;
-        if (location.host === "localhost:3000") cellNames = cellNames.slice(0, 100)
+        const totalNumCells = cellNames.length;
+        cellNames = cellNames.slice(0, event.data.cellRangePercent * cellNames.length / 100);
+
         const sampleGenes = annData.get('var').type == 'Dataset' ? 
             annData.get('var').value.map((e) => e[0]) : annData.get('var/index').value;
         const sampleExpression = annData.get('X').value;
@@ -65,14 +70,14 @@ self.onmessage = async function(event) {
 
             // Post progress update
             const countFinished = cellIndex + 1;
-            self.postMessage({ type: 'progress', countFinished, totalCells: cellNames.length });
+            self.postMessage({ type: 'progress', countFinished, totalToProcess: cellNames.length });
         }
 
         const endTime = Date.now(); // Record end time
         const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
         // Post final result
-        self.postMessage({ type: 'result', totalCells: cellNames.length, cellNames, predictions, elapsedTime });
+        self.postMessage({ type: 'result', totalNumCells, totalToProcess: cellNames.length, cellNames, predictions, elapsedTime });
     } catch (error) {
         self.postMessage({ type: 'error', error: error.message });
     }

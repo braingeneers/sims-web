@@ -29,21 +29,21 @@ async function populateModelSelect(models) {
     });
 }
 
-async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile) {
+async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile, cellRangePercent) {
     return new Promise((resolve, reject) => {
         const worker = new Worker('worker.js');
 
-        worker.postMessage({ modelName, h5adFile});
+        worker.postMessage({ modelName, h5adFile, cellRangePercent});
 
         worker.onmessage = function(event) {
-            const { type, countFinished, totalCells, cellNames, predictions, elapsedTime, error } = event.data;
+            const { type, countFinished, totalToProcess, totalNumCells, cellNames, predictions, elapsedTime, error } = event.data;
 
             if (type === 'progress') {
-                const progress = Math.round((countFinished / totalCells) * 100);
+                const progress = Math.round((countFinished / totalToProcess) * 100);
                 document.getElementById('progress-bar').style.width = `${progress}%`;
                 document.getElementById('progress-bar').textContent = `${progress}%`;
             } else if (type === 'result') {
-                document.getElementById('elapsed-time').textContent = `${totalCells} cells in ${elapsedTime.toFixed(2)} minutes`;
+                document.getElementById('elapsed-time').textContent = `${totalToProcess} of ${totalNumCells} cells in ${elapsedTime.toFixed(2)} minutes`;
                 resolve([cellNames, predictions]);
             } else if (type === 'error') {
                 reject(error);
@@ -64,8 +64,9 @@ document.getElementById("file_input").addEventListener("input", function (event)
 });
 
 
-// DEBUGING
+// DEBUGGING
 // If localhost then fill in a remote file so we can just hit enter vs. selecting each reload
+// and set the percentage to 1% for quick testing
 if (location.host === "localhost:3000") {
     async function urlToFile(url, fileName) {
         const response = await fetch(url);
@@ -93,6 +94,18 @@ if (location.host === "localhost:3000") {
     } catch (error) {
         console.error('Error:', error);
     }
+    // Set initial cell range percentage based on origin
+    const cellRangeSlider = document.getElementById('cellRange');
+    const initialValue = window.location.origin.includes('localhost') ? 1 : 100;
+    cellRangeSlider.value = initialValue;
+    document.getElementById('cellRangeValue').textContent = `${initialValue}%`; 
+
+    // Trigger input event to update display
+    const inputEvent = new Event('input', {
+        bubbles: true,
+        cancelable: true,
+    });
+    cellRangeSlider.dispatchEvent(inputEvent);
 }
 
 function outputResults(cellNames, predictions, predictionClasses) {
@@ -145,29 +158,22 @@ function outputResults(cellNames, predictions, predictionClasses) {
     resultsContainer.appendChild(table);
 }
 
-function indexOfMax(arr) {
-    if (arr.length === 0) {
-        return -1;
-    }
-
-    let max = arr[0];
-    let maxIndex = 0;
-
-    for (let i = 1; i < arr.length; i++) {
-        if (arr[i] > max) {
-            maxIndex = i;
-            max = arr[i];
-        }
-    }
-
-    return maxIndex;
-}
+// Add slider event handler to update displayed cell count and percentage
+document.getElementById('cellRange').addEventListener('input', async function(event) {
+    const percent = event.target.value;
+    document.getElementById('cellRangeValue').textContent = `${percent}%`; 
+});
 
 document.getElementById('predict_btn').addEventListener('click', async (event) => {
+    // Clear results at start of prediction
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('progress-bar').textContent = '0%';
+    document.getElementById('elapsed-time').textContent = '';
 
     let selectedModelName = document.getElementById('model_select').value;
-
     const h5AdFile = document.getElementById('file_input').files[0];
+    const cellRangePercent = document.getElementById('cellRange').value;
 
     // Load the model classes
     const response = await fetch(`models/${selectedModelName}.classes`);
@@ -177,7 +183,7 @@ document.getElementById('predict_btn').addEventListener('click', async (event) =
     const selectedModelClasses = (await response.text()).split('\n');
 
     try {
-        const [cellNames, predictions] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile);
+        const [cellNames, predictions] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile, cellRangePercent);
         console.log('Predictions', predictions);
         outputResults(cellNames, predictions, selectedModelClasses);
     } catch (error) {

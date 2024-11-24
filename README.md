@@ -4,6 +4,8 @@ Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](h
 # Demo
 [index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) that opens an h5ad in the browser and prints the raw predictions for the first cell out.
 
+![Alt text](screenshot.png?raw=true "SIMS Web Screenshot")
+
 # Running
 
 Export a SIMS checkpoint to an onnx file and list of genes. Note this assumes you have the SIMS repo as a peer to this one so it can load the model definition.
@@ -39,5 +41,7 @@ python -m http.server 3000
 [ONNX Runtime Web Platform Functionality Details](https://www.npmjs.com/package/onnxruntime-web)
 
 [ONNX Runtime Javascript Examples](https://github.com/microsoft/onnxruntime-inference-examples/tree/main/js)
+
+[Graphical ONNX Editor](https://github.com/ZhangGe6/onnx-modifier)
 
 [SIMS Streamlit App](https://sc-sims-app.streamlit.app/) and [Source](https://github.com/jesusgf1/sims_app/blob/main/streamlit_app.py)
