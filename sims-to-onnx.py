@@ -49,7 +49,9 @@ if __name__ == "__main__":
 
     n2 = so.node("Softmax", inputs=["826"], outputs=["softmax"], axis=1)
     g = so.add_node(g, n2)
-    g = so.add_output(g, "softmax", "FLOAT", [1, 8])
+    g = so.add_output(
+        g, "softmax", "FLOAT", [1, len(sims.model.label_encoder.classes_)]
+    )
 
     print("New outputs")
     so.list_outputs(g)
