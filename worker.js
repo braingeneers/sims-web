@@ -3,6 +3,14 @@ self.importScripts(
     "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
 );
 
+function inflateGenes(inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
+    for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+        let geneIndexInAllGenes = currentModelGenes.indexOf(sampleGenes[geneIndex]);
+        inputTensor.data[geneIndexInAllGenes] =
+            sampleExpression[cellIndex * sampleGenes.length + geneIndex];
+    }
+}
+
 self.onmessage = async function(event) {
     try {
         const { FS } = await h5wasm.ready;
@@ -18,12 +26,16 @@ self.onmessage = async function(event) {
         // Load the model
         console.log('Loading model..');
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-        ort.env.debug = true;
-        ort.env.numThreads = 16;
-        ort.env.logLevel = 'verbose';
-        ort.env.trace = true;
-        const currentModelSession = await ort.InferenceSession.create(`models/${event.data.modelName}.onnx`,
-            { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
+        // ort.env.numThreads = 16;
+        // ort.env.proxy = true;
+        // ort.env.debug = true;
+        // ort.env.logLevel = 'verbose';
+        // ort.env.trace = true;
+        let options = { executionProviders: ['cpu'] }
+        // options['logSeverityLevel'] = 0;
+        // options['logVerbosityLevel'] = 0;
+        const currentModelSession = await ort.InferenceSession.create(
+            `models/${event.data.modelName}.onnx`, options
         );
         console.log('Model loaded');
         console.log('Output names', currentModelSession.outputNames);
@@ -55,14 +67,11 @@ self.onmessage = async function(event) {
         for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
             // const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
-            for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-                let geneIndexInAllGenes = currentModelGenes.indexOf(sampleGenes[geneIndex]);
-                inputTensor.data[geneIndexInAllGenes] =
-                    sampleExpression[cellIndex * sampleGenes.length + geneIndex];
-            }
+
+            inflateGenes(inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression);
 
             const output = await currentModelSession.run({ "input.1": inputTensor });
-            console.log(`${cellNames[cellIndex]} logits: ${output["826"].cpuData}`);
+            // console.log(`${cellNames[cellIndex]} logits: ${output["826"].cpuData}`);
 
             const argMax = Number(output["argmax"].cpuData[0]);
             const softmax = output["softmax"].cpuData[argMax];

@@ -20,16 +20,23 @@
             // create a new session and load the specific model.
             console.log('loading model');
             ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-            const session = await ort.InferenceSession.create('models/default.onnx',
-                { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
+            const session = await ort.InferenceSession.create(
+                'models/default.onnx',
+                { executionProviders: ['cpu'] }
             );
+            // const session = await ort.InferenceSession.create(
+            //     'models/default.onnx',
+            //     { executionProviders: ['cpu'], logSeverityLevel: 0, logVerbosityLevel: 0 }
+            // );
             console.log('sims model loaded');
-            ort.env.debug = true;
-            ort.env.logLevel = 'verbose';
-            ort.env.trace = true;
-            console.log('output names', session.outputNames);
+            // ort.env.debug = true;
+            // ort.env.logLevel = 'verbose';
+            // ort.env.trace = true;
+            ort.env.numThreads = 32;
+            // ort.env.proxy = true;
+            // console.log('output names', session.outputNames);
 
-            // prepare inputs. a tensor need its corresponding TypedArray as data
+            // prepare test input tensor
             const batch_size = 1;
             const X = new ort.Tensor('float32', new Float32Array(batch_size * 33694), [batch_size, 33694]);
             for (let i = 0; i < 100; i++) {
@@ -37,12 +44,20 @@
             }
 
             // feed inputs and run
-            const results = await session.run({ "input.1": X });
-            console.log('inference done');
-            console.log(results);
-            document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);
+            const startTime = Date.now(); // Record start time
+            const numToProcess = 256;
+            for (let i = 0; i < numToProcess; i++) {
+                const results = await session.run({ "input.1": X });
+            }
+            const endTime = Date.now(); // Record end time
+            const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
+            // document.write(`Elapsed time: ${elapsedTime} minutes`);
+            console.log(`${numToProcess} in ${elapsedTime} minutes`);
+
+            // console.log(results);
+            // document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);
         } catch (e) {
-            document.write(`failed to inference ONNX model: ${e}.`);
+            console.log(`failed to inference ONNX model: ${e}.`);
         }
     }
     main();
