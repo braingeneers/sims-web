@@ -1,3 +1,7 @@
+"""
+Run the SIMS model on a test dataset and compare the output of the Pytorch model and the ONNX model
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +20,9 @@ import torch.onnx
 
 if __name__ == "__main__":
     # Load the checkpoint
-    sims = SIMS(weights_path="models/default.ckpt", map_location=torch.device("cpu"))
+    sims = SIMS(
+        weights_path="models/11A_2organoids.ckpt", map_location=torch.device("cpu")
+    )
 
     test_tensor = torch.zeros(1, 33694)
     for i in range(100):
