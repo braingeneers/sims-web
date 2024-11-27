@@ -32,7 +32,7 @@ async function populateModelSelect(models) {
     });
 }
 
-async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile, cellRangePercent) {
+async function predict(modelName, h5adFile, cellRangePercent) {
     return new Promise((resolve, reject) => {
         const worker = new Worker('worker.js');
 
@@ -59,46 +59,6 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile, ce
             reject(error.message);
         };
     });
-}
-
-let modelNames = await getListOfFileNamesExcludingSuffix("models")
-populateModelSelect(modelNames);
-
-document.getElementById("file_input").addEventListener("input", function (event) {
-    document.getElementById("file_input_label").innerText = event.target.files[0].name;
-});
-
-
-// DEBUGGING
-// If localhost then fill in a remote file so we can just hit enter vs. selecting each reload
-// and set the percentage to 1% for quick testing
-if (location.host === "localhost:3000") {
-    async function urlToFile(url, fileName) {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const file = new File([blob], fileName, { type: blob.type });
-        return file;
-    }
-
-    const fileUrl = 'http://localhost:3000/data/default.h5ad'; // Replace with actual file URL
-    const fileName = 'default.h5ad'; // Replace with desired file name
-
-    try {
-        const file = await urlToFile(fileUrl, fileName);
-        console.log('File:', file);
-
-        // You can now use this file as if it was selected from an HTML input element
-        // For example, you can set it to an input element
-        const fileInput = document.getElementById('file_input');
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        fileInput.files = dataTransfer.files;
-
-        // Update the label to show the file name
-        document.getElementById('file_input_label').innerText = file.name;
-    } catch (error) {
-        console.error('Error:', error);
-    }
 }
 
 function outputResults(cellNames, predictions, predictionClasses) {
@@ -151,36 +111,78 @@ function outputResults(cellNames, predictions, predictionClasses) {
     resultsContainer.appendChild(table);
 }
 
-// Add slider event handler to update displayed cell count and percentage
-document.getElementById('cellRange').addEventListener('input', async function(event) {
-    const percent = event.target.value;
-    document.getElementById('cellRangeValue').textContent = `${percent}%`; 
-});
+async function main() {
+    let modelNames = await getListOfFileNamesExcludingSuffix("models")
+    populateModelSelect(modelNames);
 
-document.getElementById('predict_btn').addEventListener('click', async (event) => {
-    // Clear results at start of prediction
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('progress-bar').style.width = '100%';
-    document.getElementById('progress-bar').textContent = '';
-    document.getElementById('elapsed-time').textContent = '';
+    // Update the label to show the file name
+    document.getElementById("file_input").addEventListener("input", function (event) {
+        document.getElementById("file_input_label").innerText = event.target.files[0].name;
+    });
 
-    let selectedModelName = document.getElementById('model_select').value;
-    const h5AdFile = document.getElementById('file_input').files[0];
-    const cellRangePercent = document.getElementById('cellRange').value;
+    // DEBUGGING
+    // If localhost then fill in a remote file so we can just hit enter vs. selecting each reload
+    // and set the percentage to 1% for quick testing
+    if (location.host === "localhost:3000") {
+        async function urlToFile(url, fileName) {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const file = new File([blob], fileName, { type: blob.type });
+            return file;
+        }
 
-    // Load the model classes
-    const response = await fetch(`models/${selectedModelName}.classes`);
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const fileUrl = 'http://localhost:3000/data/default.h5ad'; // Replace with actual file URL
+        const fileName = 'default.h5ad'; // Replace with desired file name
+
+        try {
+            const file = await urlToFile(fileUrl, fileName);
+            console.log('File:', file);
+
+            // You can now use this file as if it was selected from an HTML input element
+            // For example, you can set it to an input element
+            const fileInput = document.getElementById('file_input');
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+
+            // Update the label to show the file name
+            document.getElementById('file_input_label').innerText = file.name;
+        } catch (error) {
+            console.error('Error:', error);
+        }
     }
-    const selectedModelClasses = (await response.text()).split('\n');
 
-    try {
-        const [cellNames, predictions] = await extractAndInflateCellXGeneAndRunInference(selectedModelName, h5AdFile, cellRangePercent);
-        console.log('Predictions', predictions);
-        outputResults(cellNames, predictions, selectedModelClasses);
-    } catch (error) {
-        console.error('Error:', error);
-    }
+    // Add slider event handler to update displayed cell count and percentage
+    document.getElementById('cellRange').addEventListener('input', async function(event) {
+        const percent = event.target.value;
+        document.getElementById('cellRangeValue').textContent = `${percent}%`; 
+    });
 
-});
+    document.getElementById('predict_btn').addEventListener('click', async (event) => {
+        // Clear results at start of prediction
+        document.getElementById('results').innerHTML = '';
+        document.getElementById('progress-bar').style.width = '100%';
+        document.getElementById('progress-bar').textContent = '';
+        document.getElementById('elapsed-time').textContent = '';
+
+        let selectedModelName = document.getElementById('model_select').value;
+        const h5AdFile = document.getElementById('file_input').files[0];
+        const cellRangePercent = document.getElementById('cellRange').value;
+
+        // Load the model classes
+        const response = await fetch(`models/${selectedModelName}.classes`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const selectedModelClasses = (await response.text()).split('\n');
+
+        try {
+            const [cellNames, predictions] = await predict(selectedModelName, h5AdFile, cellRangePercent);
+            outputResults(cellNames, predictions, selectedModelClasses);
+        } catch (error) {
+            console.error('Error:', error);
+        }
+
+    });
+}
+await main();

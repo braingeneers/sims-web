@@ -8,13 +8,18 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
     for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
         inflationIndices.push(currentModelGenes.indexOf(sampleGenes[geneIndex]));
     }
+    const missingGenesInModel = inflationIndices.filter(x => x === -1).length;
+    console.log(`Missing genes in model: ${missingGenesInModel}`);
     return inflationIndices
 }
 
 function inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
     for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-        inputTensor.data[inflationIndices[geneIndex]] =
-            sampleExpression[cellIndex * sampleGenes.length + geneIndex];
+        const sampleIndex = inflationIndices[geneIndex];
+        if (sampleIndex !== -1) {
+            inputTensor.data[sampleIndex] =
+                sampleExpression[cellIndex * sampleGenes.length + geneIndex];
+        }
     }
 }
 
@@ -35,16 +40,17 @@ self.onmessage = async function(event) {
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
         // ort.env.numThreads = 16;
         // ort.env.proxy = true;
-        // ort.env.debug = true;
-        // ort.env.logLevel = 'verbose';
-        // ort.env.trace = true;
         let options = { executionProviders: ['cpu'] }
-        // options['logSeverityLevel'] = 0;
-        // options['logVerbosityLevel'] = 0;
+        if (location.hostname === 'localhost') {
+            ort.env.debug = true;
+            ort.env.logLevel = 'verbose';
+            ort.env.trace = true;
+            options['logSeverityLevel'] = 0;
+            options['logVerbosityLevel'] = 0;
+        }
         const currentModelSession = await ort.InferenceSession.create(
             `models/${event.data.modelName}.onnx`, options
         );
-        console.log('Model loaded');
         console.log('Output names', currentModelSession.outputNames);
 
         self.postMessage({ type: 'status', message: 'Loading file' });
@@ -55,14 +61,35 @@ self.onmessage = async function(event) {
         console.log(annData);
 
         console.log(`Top level keys: ${annData.keys()}`);
-        let cellNames = annData.get('obs').type == 'Dataset' ? 
-            annData.get('obs').value.map((e) => e[0]) : annData.get('obs/index').value;
+
+        let cellNames = [];
+        let sampleGenes = [];
+        if (annData.get('obs').type == 'Dataset') {
+            cellNames = annData.get('obs').value.map((e) => e[0]) 
+            sampleGenes = annData.get('var').value.map((e) => e[0]) 
+        } else if (annData.get('obs').type == 'Group') {
+            if (annData.get("obs").keys().includes("index")) {
+                cellNames = annData.get('obs/index').value;
+                sampleGenes = annData.get('var/index').value;
+            } else if (annData.get("obs").keys().includes("_index")) {
+                cellNames = annData.get('obs/_index').value;
+                sampleGenes = annData.get('var/_index').value;
+            } else {
+                throw new Error('Could not find cell names');
+            }
+        } else {
+            throw new Error('Could not find cell names');
+        }
+
         const totalNumCells = cellNames.length;
         cellNames = cellNames.slice(0, event.data.cellRangePercent * cellNames.length / 100);
 
-        const sampleGenes = annData.get('var').type == 'Dataset' ? 
-            annData.get('var').value.map((e) => e[0]) : annData.get('var/index').value;
-        const sampleExpression = annData.get('X').value;
+        let sampleExpression = [];
+        if (annData.get('X').type == 'Dataset') {
+            sampleExpression = annData.get('X').value;
+        } else if (annData.get('X').type == 'Group') {
+            sampleExpression = annData.get('X/data').value;
+        }
 
         // Depends on the tensor to be zero, and that each cell inflates the same genes
         let inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
@@ -73,14 +100,9 @@ self.onmessage = async function(event) {
         const startTime = Date.now(); // Record start time
 
         for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
-            // const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
-
-
             inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression);
 
             const output = await currentModelSession.run({ "input.1": inputTensor });
-            // console.log(`${cellNames[cellIndex]} logits: ${output["826"].cpuData}`);
-
             const argMax = Number(output["argmax"].cpuData[0]);
             const softmax = output["softmax"].cpuData[argMax];
             predictions.push([argMax, softmax]);
