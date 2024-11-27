@@ -1,5 +1,6 @@
 import argparse
 import sys
+import numpy as np
 import torch
 import torch.onnx
 import onnx
@@ -39,6 +40,9 @@ if __name__ == "__main__":
     print("Original outputs")
     so.list_outputs(g)
 
+    model_input_size = model.graph.input[0].type.tensor_type.shape.dim[1].dim_value
+    print(f"Model input size: {model_input_size}")
+
     # g = so.rename_output(g, "826", "logits")
     # so.list_outputs(g)
 
@@ -69,3 +73,37 @@ if __name__ == "__main__":
     with open(f"{model_path}/{model_name}.classes", "w") as f:
         f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
     print(f"Wrote out classes to {model_path}/{model_name}.classes")
+
+    """
+    Save a separate log1p graph to run when we are processing raw h5 files
+    """
+    # debug
+    # model_input_size = 9
+
+    # Create a ln(1 + x) normalization graph
+    g1 = so.empty_graph("g_log1p")
+    g1 = so.add_constant(g1, "one", np.ones((1, model_input_size)), "FLOAT")
+    g1 = so.add_input(g1, "raw", "FLOAT", [1, model_input_size])
+    n1 = so.node("Add", inputs=["raw", "one"], outputs=["1p"])
+    g1 = so.add_node(g1, n1)
+    n2 = so.node("Log", inputs=["1p"], outputs=["log1p"])
+    g1 = so.add_node(g1, n2)
+    g1 = so.add_output(g1, "log1p", "FLOAT", [1, model_input_size])
+    so.check(g1)
+    print("log1p inputs")
+    so.list_inputs(g1)
+    print("log1p outputs")
+    so.list_inputs(g1)
+    so.list_outputs(g1)
+
+    # Test the log1p graph
+    test_tensor = torch.zeros(1, model_input_size)
+    test_tensor[0, 0] = 0.0
+    test_tensor[0, 1] = 1.0
+    test_tensor[0, 2] = 1.5
+    result = so.run(g1, inputs={"raw": test_tensor.numpy()}, outputs=["log1p"])
+    print("log1p graph test")
+    print(result)
+
+    g1 = so.graph_to_file(g1, f"{model_path}/{model_name}.log1p.onnx")
+    print(f"Saved companion log1p graph to {model_path}/{model_name}.log1p.onnx")

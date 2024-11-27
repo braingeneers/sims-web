@@ -9,7 +9,7 @@ async function getListOfFileNamesExcludingSuffix(path) {
         const doc = parser.parseFromString(text, 'text/html');
         const fileElements = doc.querySelectorAll('a'); // Assuming file names are in <a> tags
         const fileNames = Array.from(fileElements).map(el => el.textContent.trim());
-        const fileRoots = fileNames.map(name => name.split('.').slice(0, -1).join('.'));
+        const fileRoots = fileNames.map(name => name.split('.')[0]);
         const uniqueFileRoots = [...new Set(fileRoots)];
         return uniqueFileRoots.filter(name => name !== '');
     } catch (error) {
