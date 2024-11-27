@@ -65,6 +65,14 @@ self.onmessage = async function(event) {
         );
         console.log('Output names', currentModelSession.outputNames);
 
+        let log1pSession = null;
+        if (event.data.h5adFile.name.endsWith(".h5")) {
+            console.log(`${event.data.h5adFile.name} considered raw so will log1p normalize`);
+            log1pSession = await ort.InferenceSession.create(
+                `models/${event.data.modelName}.log1p.onnx`, options
+            )
+        }
+
         self.postMessage({ type: 'status', message: 'Loading file' });
         FS.mkdir('/work');
         FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5adFile] }, '/work');
@@ -104,7 +112,8 @@ self.onmessage = async function(event) {
         }
 
         // Depends on the tensor to be zero, and that each cell inflates the same genes
-        let inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
+        let inputTensor = new ort.Tensor(
+            'float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
         const predictions = [];
         const inflationIndices = precomputeInflationIndices(currentModelGenes, sampleGenes);
@@ -114,7 +123,14 @@ self.onmessage = async function(event) {
         for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
             inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression);
 
-            const output = await currentModelSession.run({ "input.1": inputTensor });
+            let output = null;
+            if (log1pSession) {
+                const log1pExpression = await log1pSession.run({ "raw": inputTensor });
+                output = await currentModelSession.run(
+                    { "input.1": log1pExpression.log1p });
+            } else {
+                output = await currentModelSession.run({ "input.1": inputTensor });
+            }
             const argMax = Number(output["argmax"].cpuData[0]);
             const softmax = output["softmax"].cpuData[argMax];
             predictions.push([argMax, softmax]);
