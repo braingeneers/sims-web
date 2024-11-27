@@ -3,10 +3,17 @@ self.importScripts(
     "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
 );
 
-function inflateGenes(inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
+function precomputeInflationIndices(currentModelGenes, sampleGenes) {
+    let inflationIndices = [];
     for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-        let geneIndexInAllGenes = currentModelGenes.indexOf(sampleGenes[geneIndex]);
-        inputTensor.data[geneIndexInAllGenes] =
+        inflationIndices.push(currentModelGenes.indexOf(sampleGenes[geneIndex]));
+    }
+    return inflationIndices
+}
+
+function inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
+    for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+        inputTensor.data[inflationIndices[geneIndex]] =
             sampleExpression[cellIndex * sampleGenes.length + geneIndex];
     }
 }
@@ -61,6 +68,7 @@ self.onmessage = async function(event) {
         let inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
         const predictions = [];
+        const inflationIndices = precomputeInflationIndices(currentModelGenes, sampleGenes);
 
         const startTime = Date.now(); // Record start time
 
@@ -68,7 +76,7 @@ self.onmessage = async function(event) {
             // const inputTensor = new ort.Tensor('float32', new Float32Array(currentModelGenes.length), [1, currentModelGenes.length]);
 
 
-            inflateGenes(inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression);
+            inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression);
 
             const output = await currentModelSession.run({ "input.1": inputTensor });
             // console.log(`${cellNames[cellIndex]} logits: ${output["826"].cpuData}`);
