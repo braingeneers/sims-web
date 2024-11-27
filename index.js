@@ -39,9 +39,11 @@ async function extractAndInflateCellXGeneAndRunInference(modelName, h5adFile, ce
         worker.postMessage({ modelName, h5adFile, cellRangePercent});
 
         worker.onmessage = function(event) {
-            const { type, countFinished, totalToProcess, totalNumCells, cellNames, predictions, elapsedTime, error } = event.data;
+            const { type, message, countFinished, totalToProcess, totalNumCells, cellNames, predictions, elapsedTime, error } = event.data;
 
-            if (type === 'progress') {
+            if (type === 'status') {
+                document.getElementById('progress-bar').textContent = message;
+            } else if (type === 'progress') {
                 const progress = Math.round((countFinished / totalToProcess) * 100);
                 document.getElementById('progress-bar').style.width = `${progress}%`;
                 document.getElementById('progress-bar').textContent = `${progress}%`;
@@ -79,7 +81,7 @@ if (location.host === "localhost:3000") {
     }
 
     const fileUrl = 'http://localhost:3000/data/default.h5ad'; // Replace with actual file URL
-    const fileName = 'default.h5'; // Replace with desired file name
+    const fileName = 'default.h5ad'; // Replace with desired file name
 
     try {
         const file = await urlToFile(fileUrl, fileName);
@@ -158,8 +160,8 @@ document.getElementById('cellRange').addEventListener('input', async function(ev
 document.getElementById('predict_btn').addEventListener('click', async (event) => {
     // Clear results at start of prediction
     document.getElementById('results').innerHTML = '';
-    document.getElementById('progress-bar').style.width = '0%';
-    document.getElementById('progress-bar').textContent = '0%';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('progress-bar').textContent = '';
     document.getElementById('elapsed-time').textContent = '';
 
     let selectedModelName = document.getElementById('model_select').value;

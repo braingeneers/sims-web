@@ -24,7 +24,7 @@ self.onmessage = async function(event) {
         const currentModelGenes = (await response.text()).split('\n');
 
         // Load the model
-        console.log('Loading model..');
+        self.postMessage({ type: 'status', message: 'Loading model' });
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
         // ort.env.numThreads = 16;
         // ort.env.proxy = true;
@@ -40,7 +40,7 @@ self.onmessage = async function(event) {
         console.log('Model loaded');
         console.log('Output names', currentModelSession.outputNames);
 
-        // Load the h5file
+        self.postMessage({ type: 'status', message: 'Loading file' });
         FS.mkdir('/work');
         FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5adFile] }, '/work');
 
