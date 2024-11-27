@@ -14,11 +14,13 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
 }
 
 function inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
+    sampleExpressionSlice = sampleExpression.slice(
+        [[cellIndex, cellIndex + 1], [0, sampleGenes.length]]);
+        
     for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
         const sampleIndex = inflationIndices[geneIndex];
         if (sampleIndex !== -1) {
-            inputTensor.data[sampleIndex] =
-                sampleExpression[cellIndex * sampleGenes.length + geneIndex];
+            inputTensor.data[sampleIndex] = sampleExpressionSlice[geneIndex];
         }
     }
 }
@@ -84,11 +86,11 @@ self.onmessage = async function(event) {
         const totalNumCells = cellNames.length;
         cellNames = cellNames.slice(0, event.data.cellRangePercent * cellNames.length / 100);
 
-        let sampleExpression = [];
+        let sampleExpression = null;
         if (annData.get('X').type == 'Dataset') {
-            sampleExpression = annData.get('X').value;
+            sampleExpression = annData.get('X');
         } else if (annData.get('X').type == 'Group') {
-            sampleExpression = annData.get('X/data').value;
+            sampleExpression = annData.get('X/data');
         }
 
         // Depends on the tensor to be zero, and that each cell inflates the same genes
