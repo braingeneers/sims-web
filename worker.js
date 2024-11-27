@@ -14,8 +14,18 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
 }
 
 function inflateGenes(inflationIndices, inputTensor, cellIndex, currentModelGenes, sampleGenes, sampleExpression) {
-    sampleExpressionSlice = sampleExpression.slice(
-        [[cellIndex, cellIndex + 1], [0, sampleGenes.length]]);
+    // Slicing is done through libhdf5 javascript - should be very efficient and
+    // only read the necessary data thereby enabling unlimited size datasets
+    let sampleExpressionSlice = null;
+    if (sampleExpression.shape.length === 1) {
+        sampleExpressionSlice = sampleExpression.slice(
+            [[cellIndex * sampleGenes.length, (cellIndex + 1) * sampleGenes.length]]);
+    } else if (sampleExpression.shape.length === 2) {
+        sampleExpressionSlice = sampleExpression.slice(
+            [[cellIndex, cellIndex + 1], [0, sampleGenes.length]]);
+    } else {
+        throw new Error('Unsupported expression matrix shape');
+    }
         
     for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
         const sampleIndex = inflationIndices[geneIndex];
