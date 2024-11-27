@@ -32,9 +32,11 @@ async function populateModelSelect(models) {
     });
 }
 
+let worker;
+
 async function predict(modelName, h5adFile, cellRangePercent) {
     return new Promise((resolve, reject) => {
-        const worker = new Worker('worker.js');
+        worker = new Worker('worker.js');
 
         worker.postMessage({ modelName, h5adFile, cellRangePercent});
 
@@ -156,6 +158,16 @@ async function main() {
     document.getElementById('cellRange').addEventListener('input', async function(event) {
         const percent = event.target.value;
         document.getElementById('cellRangeValue').textContent = `${percent}%`; 
+    });
+
+    document.getElementById('stop_btn').addEventListener('click', () => {
+        if (worker) {
+            worker.terminate();
+            worker = null;
+            document.getElementById('progress-bar').textContent = 'Stopped';
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('elapsed-time').textContent = 'Prediction stopped';
+        }
     });
 
     document.getElementById('predict_btn').addEventListener('click', async (event) => {
