@@ -8,7 +8,9 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.webgpu.min.js"
+        integrity="sha512-VfhX+QkN7NbCrYehivVRUqfUdswaFcRPtmyBSMGIXGbIMRku82aqFB2mKxvrtNV9TYP6JWz371CfTIzAExMyCA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <h1>onnx webgpu</h1>
 </body>
 <script type="module">
@@ -32,7 +34,7 @@
             console.log('sims model loaded');
 
             // prepare inputs. a tensor need its corresponding TypedArray as data
-            const batch_size = 8;
+            const batch_size = 1;
             const X = new ort.Tensor('float32', new Float32Array(batch_size * 33694), [batch_size, 33694]);
             for (let i = 0; i < 100; i++) {
                 X.data[i] = 0.5;

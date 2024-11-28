@@ -34,11 +34,11 @@ async function populateModelSelect(models) {
 
 let worker;
 
-async function predict(modelName, h5adFile, cellRangePercent) {
+async function predict(modelName, h5File, cellRangePercent) {
     return new Promise((resolve, reject) => {
         worker = new Worker('worker.js');
 
-        worker.postMessage({ modelName, h5adFile, cellRangePercent});
+        worker.postMessage({ modelName, h5File, cellRangePercent});
 
         worker.onmessage = function(event) {
             const { type, message, countFinished, totalToProcess, totalNumCells, cellNames, predictions, elapsedTime, error } = event.data;
@@ -178,7 +178,7 @@ async function main() {
         document.getElementById('elapsed-time').textContent = '';
 
         let selectedModelName = document.getElementById('model_select').value;
-        const h5AdFile = document.getElementById('file_input').files[0];
+        const h5File = document.getElementById('file_input').files[0];
         const cellRangePercent = document.getElementById('cellRange').value;
 
         // Load the model classes
@@ -189,7 +189,7 @@ async function main() {
         const selectedModelClasses = (await response.text()).split('\n');
 
         try {
-            const [cellNames, predictions] = await predict(selectedModelName, h5AdFile, cellRangePercent);
+            const [cellNames, predictions] = await predict(selectedModelName, h5File, cellRangePercent);
             outputResults(cellNames, predictions, selectedModelClasses);
         } catch (error) {
             console.error('Error:', error);

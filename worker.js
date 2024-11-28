@@ -1,5 +1,5 @@
 self.importScripts(
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.min.js",
     "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
 );
 
@@ -66,8 +66,8 @@ self.onmessage = async function(event) {
         console.log('Output names', currentModelSession.outputNames);
 
         let log1pSession = null;
-        if (event.data.h5adFile.name.endsWith(".h5")) {
-            console.log(`${event.data.h5adFile.name} considered raw so will log1p normalize`);
+        if (event.data.h5File.name.endsWith(".h5")) {
+            console.log(`${event.data.h5File.name} considered raw so will log1p normalize`);
             log1pSession = await ort.InferenceSession.create(
                 `models/${event.data.modelName}.log1p.onnx`, options
             )
@@ -75,9 +75,9 @@ self.onmessage = async function(event) {
 
         self.postMessage({ type: 'status', message: 'Loading file' });
         FS.mkdir('/work');
-        FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5adFile] }, '/work');
+        FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5File] }, '/work');
 
-        const  annData= new h5wasm.File(`/work/${event.data.h5adFile.name}`, 'r');
+        const annData= new h5wasm.File(`/work/${event.data.h5File.name}`, 'r');
         console.log(annData);
 
         console.log(`Top level keys: ${annData.keys()}`);

@@ -82,7 +82,10 @@ if __name__ == "__main__":
 
     # Create a ln(1 + x) normalization graph
     g1 = so.empty_graph("g_log1p")
-    g1 = so.add_constant(g1, "one", np.ones((1, model_input_size)), "FLOAT")
+    # Can use broadcast here, but we'll just add a constant
+    # https://github.com/onnx/onnx/blob/main/docs/Broadcasting.md
+    # g1 = so.add_constant(g1, "one", np.ones((1, model_input_size)), "FLOAT")
+    g1 = so.add_constant(g1, "one", np.ones((1, 1)), "FLOAT")
     g1 = so.add_input(g1, "raw", "FLOAT", [1, model_input_size])
     n1 = so.node("Add", inputs=["raw", "one"], outputs=["1p"])
     g1 = so.add_node(g1, n1)
@@ -104,6 +107,7 @@ if __name__ == "__main__":
     result = so.run(g1, inputs={"raw": test_tensor.numpy()}, outputs=["log1p"])
     print("log1p graph test")
     print(result)
+    print("Should be:", np.log1p([0.0, 1.0, 1.5]))
 
     g1 = so.graph_to_file(g1, f"{model_path}/{model_name}.log1p.onnx")
     print(f"Saved companion log1p graph to {model_path}/{model_name}.log1p.onnx")
