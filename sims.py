@@ -24,6 +24,11 @@ if __name__ == "__main__":
         weights_path="models/11A_2organoids.ckpt", map_location=torch.device("cpu")
     )
 
+    # Create a test tensor
+    test_tensor = torch.zeros(1, model_input_size)
+    for i in range(0, model_input_size, 8):
+        test_tensor[0, i] = 0.5
+
     test_tensor = torch.zeros(1, 33694)
     for i in range(100):
         test_tensor[0, i] = 0.5
@@ -31,13 +36,13 @@ if __name__ == "__main__":
     # Pytorch
     sims.model.eval()  # This is necessary to avoid dropout
     results = sims.model(test_tensor.float())
-    print("sims.model() output")
-    print(results[0][0])
 
     # Try onnx
     session = onnxruntime.InferenceSession("models/default.onnx")
     outputs = session.run(None, {"input.1": test_tensor.numpy()})
-    print("onnx session run output")
+
+    print("sims.model vs. onnxruntime output:")
+    print(results[0][0].detach().numpy())
     print(outputs[0][0])
 
     # Load the dataset
