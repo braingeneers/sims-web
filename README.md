@@ -1,8 +1,8 @@
 # sims-web
-Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](https://github.com/usnistgov/h5wasm) to read local AnnData (.h5ad) files and [ONNX](https://onnxruntime.ai/) to run the model on CPU or GPU if available.
+Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [scran.js](https://github.com/kanaverse/scran.js) and [h5wasm](https://github.com/usnistgov/h5wasm) to read local AnnData (.h5ad) files and [ONNX](https://onnxruntime.ai/) to run the model on CPU or GPU if available.
 
 # Demo
-[index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) that opens an h5ad in the browser and prints the raw predictions for the first cell out.
+[index.html](https://public.gi.ucsc.edu/~rcurrie/sims/) opens an h5ad in the browser and runs a selected SIMs model and displays predictions.
 
 ![Alt text](screenshot.png?raw=true "SIMS Web Screenshot")
 
@@ -32,7 +32,7 @@ python -m http.server 3000
 # References
 [h5wasm](https://github.com/usnistgov/h5wasm)
 
-[anndata/h5ad file structure](https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html)
+[anndata/h5ad file structure](https://anndata.readthedocs.io/en/latest/tutorials/notebooks/getting-started.html) and [on disk format](https://anndata.readthedocs.io/en/latest/fileformat-prose.html)
 
 [Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 
