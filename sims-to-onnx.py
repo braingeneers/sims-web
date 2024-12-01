@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.onnx
 import anndata as ad
+import onnx
 import sclblonnx as so
 
 from scsims import SIMS
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     print("vs.")
     print("SIMS preprocess:", batch[1][0][[44, 54, 68]].numpy())
 
-    onnx.save(model, f"{model_path}/{model_name}.onnx")
+    so.graph_to_file(g, f"{model_path}/{model_name}.pre.onnx")
     print(f"Saved preprocessing model to {model_path}/{model_name}.pre.onnx")
 
     """
@@ -84,14 +85,14 @@ if __name__ == "__main__":
     # wrt batch size https://github.com/microsoft/onnxruntime/issues/19452#issuecomment-1947799229
     batch_size = 1
     sims.model.to_onnx(
-        f"{model_path}/{model_name}.onnx",
+        f"{model_path}/{model_name}.core.onnx",
         torch.zeros(batch_size, num_model_genes),
         export_params=True,
     )
-    print(f"Exported model to {model_path}/{model_name}.onnx")
+    print(f"Exported core model to {model_path}/{model_name}.core.onnx")
 
     # Load the model back in as onnx for checking and editing
-    model = onnx.load(f"{model_path}/{model_name}.onnx")
+    model = onnx.load(f"{model_path}/{model_name}.core.onnx")
     onnx.checker.check_model(model)
     g = model.graph
     print("Original inputs")
@@ -107,11 +108,13 @@ if __name__ == "__main__":
     n = so.node("ArgMax", inputs=["826"], outputs=["argmax"], keepdims=0, axis=1)
     g = so.add_node(g, n)
     g = so.add_output(g, "argmax", "INT64", [1])
+
     n = so.node("Softmax", inputs=["826"], outputs=["softmax"], axis=1)
     g = so.add_node(g, n)
     g = so.add_output(
         g, "softmax", "FLOAT", [1, len(sims.model.label_encoder.classes_)]
     )
+
     print("New outputs")
     so.list_outputs(g)
 
