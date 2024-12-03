@@ -128,6 +128,19 @@ if __name__ == "__main__":
     onnx.save(model, f"{model_path}/{model_name}.onnx")
     print(f"Saved modified model to {model_path}/{model_name}.onnx")
 
+
+
+    """
+    Attempt to validate the onnx models with the full SIMS model
+    """
+    sample = batch[1].to(torch.float32)
+    res = sims.model(sample)[0][0]
+    probs, top_preds = res.topk(3)
+    probs = probs.softmax(dim=-1)
+    print("SIMS Python Model Results:")
+    print(probs)
+
+
     # """
     # Save a separate log1p graph to run when we are processing raw h5 files
     # """
