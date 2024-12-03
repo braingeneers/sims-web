@@ -56,26 +56,25 @@ if __name__ == "__main__":
     adata = ad.read(args.sample)
 
     g = so.empty_graph("preprocess")
-    g = so.add_input(g, "input", "FLOAT", [model_input_size])
+    g = so.add_input(g, "input", "FLOAT", [1, model_input_size])
     # SIMS runs torch.nn.functional.normalize() which performs Lp normalization on samples
     n = so.node("LpNormalization", inputs=["input"], outputs=["output"])
     g = so.add_node(g, n)
-    g = so.add_output(g, "output", "FLOAT", [model_input_size])
+    g = so.add_output(g, "output", "FLOAT", [1, model_input_size])
     so.check(g)
     print("preprocess inputs and outputs")
     so.list_inputs(g)
     so.list_outputs(g)
     # result = so.run(g, inputs={"input": batch[1].to(torch.float32).numpy()}, outputs=["output"])
+    padded = torch.tensor(np.pad(adata.X[0, :], (0, model_input_size - adata.n_vars))).view((1, model_input_size))
     result = so.run(
         g,
-        inputs={"input": np.pad(adata.X[0, :], (0, model_input_size - adata.n_vars))},
+        inputs={"input": padded.numpy()},
         outputs=["output"],
     )
 
     # Get a normalized and inflated sample from the model's loader
-    loader = sims.model._parse_data(args.sample, batch_size=1)
-    iter = enumerate(loader)
-    batch = next(iter)
+    batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
 
     print("ONNX preprocess:", result[0][0:3])
     print("vs.")
