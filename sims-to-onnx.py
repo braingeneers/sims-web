@@ -4,6 +4,7 @@ The model is based off of the core SIMS pytorch model exported to ONNX and then
 extended with pre and post processing steps to match those in the SIMS source.
 """
 
+import os
 import argparse
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
     parser.add_argument("sample", type=str, help="Path to the sample for validation")
     args = parser.parse_args()
+
 
     # Load the checkpoint
     print("Loading model...")
@@ -39,6 +41,11 @@ if __name__ == "__main__":
     with open(f"{model_path}/{model_name}.classes", "w") as f:
         f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
     print(f"Wrote out gene and classes lists to {model_path}/{model_name}")
+
+    # Output a list of all models to populate the model selection drop down
+    with open(f"{model_path}/models.txt", "w") as f:
+        f.write("\n".join(list(set(f.split(".")[0] 
+                                   for f in os.listdir("models") if f != "models.txt"))))
 
     """
     Build an onnx graph to pre-process a sample for inference. At this point
