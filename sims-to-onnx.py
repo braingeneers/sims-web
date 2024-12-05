@@ -159,14 +159,35 @@ if __name__ == "__main__":
         sorted=1   # Optional: set to 1 to return sorted values
     )
 
+    # Create the Softmax node
+    softmax_node = helper.make_node(
+        'Softmax',
+        inputs=['topk_values'],
+        outputs=['probs'],
+        name='Softmax_Node',
+        axis=-1  # Apply softmax along the last dimension
+    )
+
     # Add the new nodes to the graph
-    g.node.extend([k_node, topk_node])
+    g.node.extend([k_node, topk_node, softmax_node])
 
     # Optionally, add 'topk_values' and 'topk_indices' to the graph outputs
     g.output.extend([
         helper.make_tensor_value_info('topk_values', TensorProto.FLOAT, [None, 3]),
         helper.make_tensor_value_info('topk_indices', TensorProto.INT64, [None, 3]),
+        helper.make_tensor_value_info('probs', TensorProto.FLOAT, [None, 3]),
     ])
     
     result = so.run(g, inputs={"input": padded.numpy()}, outputs=["topk_values"])
     so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
+
+
+    """
+    Attempt to validate the onnx models with the full SIMS model
+    """
+    sample = batch[1].to(torch.float32)
+    res = sims.model(sample)[0][0]
+    probs, top_preds = res.topk(3)
+    probs = probs.softmax(dim=-1)
+    print("SIMS Python Model Results:")
+    print(probs)
