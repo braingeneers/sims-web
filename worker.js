@@ -77,12 +77,6 @@ self.onmessage = async function (event) {
     );
     console.log("Model Output names", currentModelSession.outputNames);
 
-    const preSession = await ort.InferenceSession.create(
-      `models/${event.data.modelName}.pre.onnx`,
-      options
-    );
-    console.log("Pre Model Output names", preSession.outputNames);
-
     self.postMessage({ type: "status", message: "Loading file" });
     FS.mkdir("/work");
     FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5File] }, "/work");
@@ -149,8 +143,7 @@ self.onmessage = async function (event) {
         sampleExpression
       );
 
-      let pre = await preSession.run({ input: inputTensor });
-      let output = await currentModelSession.run({ "input.1": pre.output });
+      let output = await currentModelSession.run({ input: inputTensor });
       const argMax = Number(output["argmax"].cpuData[0]);
       const softmax = output["softmax"].cpuData[argMax];
       predictions.push([argMax, softmax]);

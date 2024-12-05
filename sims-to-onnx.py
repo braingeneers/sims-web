@@ -5,12 +5,14 @@ extended with pre and post processing steps to match those in the SIMS source.
 """
 
 import os
+import sys
 import argparse
 import numpy as np
 import torch
 import torch.onnx
 import anndata as ad
 import onnx
+from onnx import helper, TensorProto
 import sclblonnx as so
 
 from scsims import SIMS
@@ -21,10 +23,13 @@ if __name__ == "__main__":
     parser.add_argument("sample", type=str, help="Path to the sample for validation")
     args = parser.parse_args()
 
+    model_name = args.checkpoint.split("/")[-1].split(".")[0]
+    model_path = "/".join(args.checkpoint.split("/")[:-1])
 
     # Load the checkpoint
     print("Loading model...")
-    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"))
+    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
+    sims.model.eval()  # Turns off training mode?
     model_input_size = sims.model.input_dim
     num_model_genes = len(sims.model.genes)
     num_model_classes = len(sims.model.label_encoder.classes_)
@@ -33,9 +38,32 @@ if __name__ == "__main__":
         f"Loaded {args.checkpoint} with {num_model_genes} genes and {num_model_classes} classes"
     )
 
+
+    # Export model to ONNX file so we can read back and add post-processing steps
+    batch_size = 1
+    # sims.model.to_onnx(
+    #     f"{model_path}/{model_name}.core.onnx",
+    #     torch.zeros(batch_size, num_model_genes),
+    #     export_params=True,
+    #     training=torch.onnx.TrainingMode.EVAL,
+    # )
+    torch.onnx.export(
+        sims.model,
+        torch.zeros(batch_size, num_model_genes),
+        f"{model_path}/{model_name}.core.onnx",
+        training=torch.onnx.TrainingMode.EVAL,
+        input_names=["input"],
+        output_names=["logits","unknown"],
+        export_params=True,
+        opset_version=12,
+    )
+    print(f"Exported core model to {model_path}/{model_name}.core.onnx")
+
+    # Get a normalized and inflated sample from the model for testing
+    batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
+    sample = batch[1].to(torch.float32)
+
     # Write out the gene and class lists
-    model_name = args.checkpoint.split("/")[-1].split(".")[0]
-    model_path = "/".join(args.checkpoint.split("/")[:-1])
     with open(f"{model_path}/{model_name}.genes", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
     with open(f"{model_path}/{model_name}.classes", "w") as f:
@@ -48,152 +76,97 @@ if __name__ == "__main__":
                                    for f in os.listdir("models") if f != "models.txt"))))
 
     """
-    Build an onnx graph to pre-process a sample for inference. At this point
-    only the LpNormalization is implemented. 
+    Build an onnx graph with post processing steps to match the SIMS model.
+    See https://github.com/scailable/sclblonnx/tree/master/examples
     """
 
-    # Load a sample directly to compare preprocessing to SIMS
-    adata = ad.read(args.sample)
+    # Preprocessing Graph
+    pre_graph = so.empty_graph("preprocess")
+    pre_graph = so.add_input(pre_graph, "input", "FLOAT", [1, model_input_size])
+    n = so.node("LpNormalization", inputs=["input"], outputs=["lpnorm"])
+    pre_graph = so.add_node(pre_graph, n)
+    pre_graph = so.add_output(pre_graph, "lpnorm", "FLOAT", [1, model_input_size])
 
-    g = so.empty_graph("preprocess")
-    g = so.add_input(g, "input", "FLOAT", [1, model_input_size])
-    # SIMS runs torch.nn.functional.normalize() which performs Lp normalization on samples
-    n = so.node("LpNormalization", inputs=["input"], outputs=["output"])
-    g = so.add_node(g, n)
-    g = so.add_output(g, "output", "FLOAT", [1, model_input_size])
-    so.check(g)
-    print("preprocess inputs and outputs")
-    so.list_inputs(g)
-    so.list_outputs(g)
+    # Validate the preprocessing graph against the SIMS model
     # result = so.run(g, inputs={"input": batch[1].to(torch.float32).numpy()}, outputs=["output"])
+    adata = ad.read(args.sample)
     padded = torch.tensor(np.pad(adata.X[0, :], (0, model_input_size - adata.n_vars))).view((1, model_input_size))
-    result = so.run(
-        g,
-        inputs={"input": padded.numpy()},
-        outputs=["output"],
-    )
-
-    # Get a normalized and inflated sample from the model's loader
-    batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
-
-    print("ONNX preprocess:", result[0][0:3])
+    result = so.run(pre_graph, inputs={"input": padded.numpy()}, outputs=["lpnorm"])
+    print("ONNX preprocess:", result[0][0][0:3])
     print("vs.")
     print("SIMS preprocess:", batch[1][0][[44, 54, 68]].numpy())
 
-    so.graph_to_file(g, f"{model_path}/{model_name}.pre.onnx")
-    print(f"Saved preprocessing model to {model_path}/{model_name}.pre.onnx")
+    # Load the core model
+    core_graph = so.graph_from_file(f"{model_path}/{model_name}.core.onnx")
+    core_graph = so.delete_output(core_graph, "unknown")
 
-    """
-    Build an onnx graph with post processing steps to match the SIMS model.
-    """
-
-    # Export model to ONNX file so we can read back and add post-processing steps
-    # wrt batch size https://github.com/microsoft/onnxruntime/issues/19452#issuecomment-1947799229
-    batch_size = 1
-    sims.model.to_onnx(
-        f"{model_path}/{model_name}.core.onnx",
-        torch.zeros(batch_size, num_model_genes),
-        export_params=True,
-    )
-    print(f"Exported core model to {model_path}/{model_name}.core.onnx")
-
-    # Load the model back in as onnx for checking and editing
-    model = onnx.load(f"{model_path}/{model_name}.core.onnx")
-    onnx.checker.check_model(model)
-    g = model.graph
-    print("Original inputs")
+    # Merge pre with the core model
+    g = so.merge(pre_graph, core_graph, io_match=[("lpnorm", "input")], _sclbl_check=False)
     so.list_inputs(g)
-    print("Original outputs")
     so.list_outputs(g)
+    so.check(g, _sclbl_check=True)
 
-    # Doesn't seem to work...
-    # g = so.rename_output(g, "826", "logits")
-    # so.list_outputs(g)
+    # Try the new merged graph
+    result = so.run(g, inputs={"input": padded.numpy()}, outputs=["logits"])
+    so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
 
     # Modify the model to add an ArgMax and Softmax output
-    n = so.node("ArgMax", inputs=["826"], outputs=["argmax"], keepdims=0, axis=1)
+    n = so.node("ArgMax", inputs=["logits"], outputs=["argmax"], keepdims=0, axis=1)
     g = so.add_node(g, n)
     g = so.add_output(g, "argmax", "INT64", [1])
 
-    n = so.node("Softmax", inputs=["826"], outputs=["softmax"], axis=1)
+    n = so.node("Softmax", inputs=["logits"], outputs=["softmax"], axis=1)
     g = so.add_node(g, n)
     g = so.add_output(
         g, "softmax", "FLOAT", [1, len(sims.model.label_encoder.classes_)]
     )
 
-    print("New outputs")
-    so.list_outputs(g)
 
-    # Save the modified ONNX model
-    onnx.save(model, f"{model_path}/{model_name}.onnx")
-    print(f"Saved modified model to {model_path}/{model_name}.onnx")
+    result = so.run(g, inputs={"input": padded.numpy()}, outputs=["logits"])
+    so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
 
+    logits = result[0]
 
+    sys.exit(0)
 
-    """
-    Attempt to validate the onnx models with the full SIMS model
-    """
-    sample = batch[1].to(torch.float32)
-    res = sims.model(sample)[0][0]
-    probs, top_preds = res.topk(3)
-    probs = probs.softmax(dim=-1)
-    print("SIMS Python Model Results:")
-    print(probs)
+    g = so.graph_from_file(f"{model_path}/{model_name}.onnx")
 
+    # Create a Constant node 'K' with value 3
+    k_value = np.array([3], dtype=np.int64)
+    k_node = helper.make_node(
+        'Constant',
+        inputs=[],
+        outputs=['K'],
+        value=helper.make_tensor(
+            name='const_tensor_K',
+            data_type=TensorProto.INT64,
+            dims=[1],
+            vals=k_value
+        ),
+        name='K_Node'
+    )
 
-    # """
-    # Save a separate log1p graph to run when we are processing raw h5 files
-    # """
-    # # debug
-    # # model_input_size = 9
+    # Create the TopK node
+    # Inputs: 'logits', 'K'
+    # Outputs: 'topk_values', 'topk_indices'
+    topk_node = helper.make_node(
+        'TopK',
+        inputs=['logits', 'K'],
+        outputs=['topk_values', 'topk_indices'],
+        name='TopK_Node',
+        axis=-1,   # Optional: specify the axis over which to compute TopK
+        largest=1, # Optional: set to 1 for largest values; 0 for smallest
+        sorted=1   # Optional: set to 1 to return sorted values
+    )
 
-    # # Create a ln(1 + x) normalization graph
-    # g = so.empty_graph("log1p")
-    # # Can use broadcast here, but we'll just add a constant
-    # # https://github.com/onnx/onnx/blob/main/docs/Broadcasting.md
-    # # g = so.add_constant(g, "one", np.ones((1, model_input_size)), "FLOAT")
-    # g = so.add_constant(g, "one", np.ones((1, 1)), "FLOAT")
-    # g = so.add_input(g, "raw", "FLOAT", [1, model_input_size])
-    # n = so.node("Add", inputs=["raw", "one"], outputs=["1p"])
-    # g = so.add_node(g, n)
-    # n = so.node("Log", inputs=["1p"], outputs=["log1p"])
-    # g = so.add_node(g, n)
-    # g = so.add_output(g, "log1p", "FLOAT", [1, model_input_size])
-    # so.check(g)
-    # print("log1p inputs")
-    # so.list_inputs(g)
-    # print("log1p outputs")
-    # so.list_inputs(g)
-    # so.list_outputs(g)
+    # Add the new nodes to the graph
+    g.node.extend([k_node, topk_node])
 
-    # # Test the log1p graph
-    # result = so.run(g, inputs={"raw": test_tensor.numpy()}, outputs=["log1p"])
-    # print("log1p graph test")
-    # print(result)
-    # print("Should be:", np.log1p([0.0, 1.0, 1.5]))
-
-    # so.graph_to_file(g, f"{model_path}/{model_name}.log1p.onnx")
-    # print(f"Saved log1p graph to {model_path}/{model_name}.log1p.onnx")
-
-    # # # Create a combined log1p + model graph
-    # # g1 = so.graph_from_file(f"{model_path}/{model_name}.log1p.onnx")
-    # # g2 = so.graph_from_file(f"{model_path}/{model_name}.onnx")
-    # # g12 = so.merge(sg1=g1, sg2=g2, io_match=[("log1p", "input.1")], complete=False)
-    # # so.check(g1, _sclbl_check=False)
-    # # so.check(g2, _sclbl_check=False)
-    # # so.check(g12, _sclbl_check=False)
-
-    # # so.list_inputs(g12)
-    # # so.list_outputs(g12)
-
-    # # so.graph_to_file(g12, f"{model_path}/{model_name}.combined.onnx")
-
-    # # session = onnxruntime.InferenceSession(f"{model_path}/{model_name}.combined.onnx")
-    # # outputs = session.run(None, {"raw": test_tensor.numpy()})
-
-    # # model = onnx.load(f"{model_path}/{model_name}.combined.onnx")
-
-    # # result = so.run(g12, inputs={"raw": test_tensor.numpy()}, outputs=["826"])
-    # # print("log1p graph test")
-    # # print(result)
-    # # print("Should be:", np.log1p([0.0, 1.0, 1.5]))
+    # Optionally, add 'topk_values' and 'topk_indices' to the graph outputs
+    g.output.extend([
+        helper.make_tensor_value_info('topk_values', TensorProto.FLOAT, [None, 3]),
+        helper.make_tensor_value_info('topk_indices', TensorProto.INT64, [None, 3]),
+    ])
+    
+    result = so.run(g, inputs={"input": padded.numpy()}, outputs=["topk_values"])
+    so.graph_to_file(g, f"{model_path}/{model_name}.onnx")

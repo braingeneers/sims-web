@@ -4,4 +4,6 @@ onnx
 onnxruntime
 sclblonnx
 
+onnxscript
+
 ipython
