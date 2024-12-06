@@ -144,9 +144,7 @@ self.onmessage = async function (event) {
       );
 
       let output = await currentModelSession.run({ input: inputTensor });
-      const argMax = Number(output["argmax"].cpuData[0]);
-      const softmax = output["softmax"].cpuData[argMax];
-      predictions.push([argMax, softmax]);
+      predictions.push([output.topk_indices.cpuData, output.probs.cpuData]);
 
       // Post progress update
       const countFinished = cellIndex + 1;

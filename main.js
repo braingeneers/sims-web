@@ -93,13 +93,15 @@ function outputResults(cellNames, predictions, predictionClasses) {
   cellHeader.textContent = "Cell";
   headerRow.appendChild(cellHeader);
 
-  const classHeader = document.createElement("th");
-  classHeader.textContent = "Class";
-  headerRow.appendChild(classHeader);
+  for (let i = 0; i < 3; i++) {
+    const classHeader = document.createElement("th");
+    classHeader.textContent = `Class ${i + 1}`;
+    headerRow.appendChild(classHeader);
 
-  const confidenceHeader = document.createElement("th");
-  confidenceHeader.textContent = "Confidence";
-  headerRow.appendChild(confidenceHeader);
+    const confidenceHeader = document.createElement("th");
+    confidenceHeader.textContent = `Prob ${i + 1}`;
+    headerRow.appendChild(confidenceHeader);
+  }
 
   thead.appendChild(headerRow);
   table.appendChild(thead);
@@ -114,13 +116,15 @@ function outputResults(cellNames, predictions, predictionClasses) {
     cellNameCell.textContent = cellName;
     row.appendChild(cellNameCell);
 
-    const classCell = document.createElement("td");
-    classCell.textContent = predictionClasses[predictions[cellIndex][0]];
-    row.appendChild(classCell);
+    for (let i = 0; i < 3; i++) {
+      const classCell = document.createElement("td");
+      classCell.textContent = predictionClasses[predictions[cellIndex][0][i]];
+      row.appendChild(classCell);
 
-    const classSoftmax = document.createElement("td");
-    classSoftmax.textContent = predictions[cellIndex][1].toFixed(4);
-    row.appendChild(classSoftmax);
+      const classSoftmax = document.createElement("td");
+      classSoftmax.textContent = predictions[cellIndex][1][i].toFixed(4);
+      row.appendChild(classSoftmax);
+    }
 
     tbody.appendChild(row);
   });
