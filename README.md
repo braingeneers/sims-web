@@ -23,6 +23,9 @@ Serve the web app and models locally
 python -m http.server 3000
 ```
 
+# Memory Requirements
+[worker.js](worker.js) uses h5wasm slice() to read data from the cell by gene matrix (i.e. X). As these data on disk are typically stored row major (i.e. all data for a cell is contiguous) we can process the sample incrementally keeping memory requirements to a minimum. Reading cell by cell from a 5.3G h5ad file consumed just under 30M of browser memory. YMMV.
+
 # Functional Experiments 
 
 [h5ad.html](h5ad.html) demonstrates reading an h5ad file over http and using h5wasm in the browser and extracting the gene names and expression matrix values. Must be served locally to comply with CORS. An actual implementation would present an open file dialog to read a file locally.
