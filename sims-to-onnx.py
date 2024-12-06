@@ -38,15 +38,8 @@ if __name__ == "__main__":
         f"Loaded {args.checkpoint} with {num_model_genes} genes and {num_model_classes} classes"
     )
 
-
     # Export model to ONNX file so we can read back and add post-processing steps
     batch_size = 1
-    # sims.model.to_onnx(
-    #     f"{model_path}/{model_name}.core.onnx",
-    #     torch.zeros(batch_size, num_model_genes),
-    #     export_params=True,
-    #     training=torch.onnx.TrainingMode.EVAL,
-    # )
     torch.onnx.export(
         sims.model,
         torch.zeros(batch_size, num_model_genes),
@@ -106,29 +99,11 @@ if __name__ == "__main__":
     so.list_outputs(g)
     so.check(g, _sclbl_check=True)
 
-    # Try the new merged graph
+    # Try the new merged graph and save to disk
     result = so.run(g, inputs={"input": padded.numpy()}, outputs=["logits"])
     so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
 
-    # Modify the model to add an ArgMax and Softmax output
-    n = so.node("ArgMax", inputs=["logits"], outputs=["argmax"], keepdims=0, axis=1)
-    g = so.add_node(g, n)
-    g = so.add_output(g, "argmax", "INT64", [1])
-
-    n = so.node("Softmax", inputs=["logits"], outputs=["softmax"], axis=1)
-    g = so.add_node(g, n)
-    g = so.add_output(
-        g, "softmax", "FLOAT", [1, len(sims.model.label_encoder.classes_)]
-    )
-
-
-    result = so.run(g, inputs={"input": padded.numpy()}, outputs=["logits"])
-    so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
-
-    logits = result[0]
-
-    sys.exit(0)
-
+    # Load the new graph and add post processing steps
     g = so.graph_from_file(f"{model_path}/{model_name}.onnx")
 
     # Create a Constant node 'K' with value 3
@@ -181,13 +156,12 @@ if __name__ == "__main__":
     result = so.run(g, inputs={"input": padded.numpy()}, outputs=["topk_values"])
     so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
 
-
-    """
-    Attempt to validate the onnx models with the full SIMS model
-    """
-    sample = batch[1].to(torch.float32)
-    res = sims.model(sample)[0][0]
-    probs, top_preds = res.topk(3)
-    probs = probs.softmax(dim=-1)
-    print("SIMS Python Model Results:")
-    print(probs)
+    # """
+    # Attempt to validate the onnx models with the full SIMS model
+    # """
+    # sample = batch[1].to(torch.float32)
+    # res = sims.model(sample)[0][0]
+    # probs, top_preds = res.topk(3)
+    # probs = probs.softmax(dim=-1)
+    # print("SIMS Python Model Results:")
+    # print(probs)
