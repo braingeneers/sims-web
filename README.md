@@ -6,11 +6,11 @@ Opens an h5ad in the browser and runs a selected SIMs model and displays predict
 
 ![Alt text](screenshot.png?raw=true "SIMS Web Screenshot")
 
-# Running
+# Developing
 
 Export a SIMS checkpoint to an onnx file and list of genes. Note this assumes you have the SIMS repo as a peer to this one so it can load the model definition.
 ```
-python sims-to-onnx.py models/default.ckpt
+python scripts/sims-to-onnx.py models/default.ckpt
 ```
 
 Check the core model for compatibility with onnx
@@ -20,7 +20,7 @@ python -m onnxruntime.tools.check_onnx_model_mobile_usability models/default.onn
 
 Serve the web app and models locally
 ```
-python -m http.server 3000
+make serve
 ```
 
 # Memory Requirements
@@ -28,12 +28,6 @@ python -m http.server 3000
 
 # Performance
 Processing a test sample with 2638 cells took 67 seconds in the browser vs. 34 seconds in python on the same machine.
-
-# Functional Experiments 
-
-[h5ad.html](h5ad.html) demonstrates reading an h5ad file over http and using h5wasm in the browser and extracting the gene names and expression matrix values. Must be served locally to comply with CORS. An actual implementation would present an open file dialog to read a file locally.
-
-[onnx.html](onnx.html) demonstrates loading the sims.onnx file in the browser and running forward inference on a sample zero tensor.
 
 # References
 [Open Neural Network Exchange (ONNX)](https://onnx.ai/)
