@@ -146,36 +146,38 @@ async function main() {
         event.target.files[0].name;
     });
 
-  // DEBUGGING
-  // If localhost then fill in a remote file so we can just hit enter vs. selecting each reload
-  // and set the percentage to 1% for quick testing
-  if (location.host === "localhost:3000") {
-    async function urlToFile(url, fileName) {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const file = new File([blob], fileName, { type: blob.type });
-      return file;
-    }
+  // Fill in a sample file so a user can just hit predict to try out
+  async function urlToFile(url, fileName) {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const file = new File([blob], fileName, { type: blob.type });
+    return file;
+  }
 
-    const fileUrl = "http://localhost:3000/sample.h5ad"; // Replace with actual file URL
-    const fileName = "sample.h5ad"; // Replace with desired file name
+  const sitePath =
+    window.location.origin +
+    window.location.pathname.slice(
+      0,
+      window.location.pathname.lastIndexOf("/")
+    );
+  const fileUrl = `${sitePath}/sample.h5ad`;
+  const fileName = "sample.h5ad";
 
-    try {
-      const file = await urlToFile(fileUrl, fileName);
-      console.log("File:", file);
+  try {
+    const file = await urlToFile(fileUrl, fileName);
+    console.log("File:", file);
 
-      // You can now use this file as if it was selected from an HTML input element
-      // For example, you can set it to an input element
-      const fileInput = document.getElementById("file_input");
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      fileInput.files = dataTransfer.files;
+    // You can now use this file as if it was selected from an HTML input element
+    // For example, you can set it to an input element
+    const fileInput = document.getElementById("file_input");
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    fileInput.files = dataTransfer.files;
 
-      // Update the label to show the file name
-      document.getElementById("file_input_label").innerText = file.name;
-    } catch (error) {
-      console.error("Error:", error);
-    }
+    // Update the label to show the file name
+    document.getElementById("file_input_label").innerText = file.name;
+  } catch (error) {
+    console.error("Error:", error);
   }
 
   // Add slider event handler to update displayed cell count and percentage
