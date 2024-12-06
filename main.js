@@ -157,8 +157,8 @@ async function main() {
       return file;
     }
 
-    const fileUrl = "http://localhost:3000/data/default.h5ad"; // Replace with actual file URL
-    const fileName = "default.h5ad"; // Replace with desired file name
+    const fileUrl = "http://localhost:3000/sample.h5ad"; // Replace with actual file URL
+    const fileName = "sample.h5ad"; // Replace with desired file name
 
     try {
       const file = await urlToFile(fileUrl, fileName);

@@ -18,13 +18,16 @@ from scsims import SIMS
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export a SIMS model to ONNX")
     parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
+    parser.add_argument("destination", type=str, help="Path to save the ONNX model")
+
     args = parser.parse_args()
 
     model_name = args.checkpoint.split("/")[-1].split(".")[0]
-    model_path = "/".join(args.checkpoint.split("/")[:-1])
+    # model_path = "/".join(args.checkpoint.split("/")[:-1])
+    model_path = args.destination
 
     # Load the checkpoint
-    print("Loading model...")
+    print("Loading checkpoint...")
     sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
     sims.model.eval()  # Turns off training mode?
     model_input_size = sims.model.input_dim
@@ -40,14 +43,14 @@ if __name__ == "__main__":
     torch.onnx.export(
         sims.model,
         torch.zeros(batch_size, num_model_genes),
-        f"{model_path}/{model_name}.core.onnx",
+        f"{model_path}/{model_name}.onnx",
         training=torch.onnx.TrainingMode.EVAL,
         input_names=["input"],
         output_names=["logits","unknown"],
         export_params=True,
         opset_version=12,
     )
-    print(f"Exported core model to {model_path}/{model_name}.core.onnx")
+    print(f"Exported interium model to {model_path}/{model_name}.onnx")
 
     # Write out the gene and class lists
     with open(f"{model_path}/{model_name}.genes", "w") as f:
@@ -68,7 +71,7 @@ if __name__ == "__main__":
     """
 
     # Load the core model back in via onnx
-    core_graph = so.graph_from_file(f"{model_path}/{model_name}.core.onnx")
+    core_graph = so.graph_from_file(f"{model_path}/{model_name}.onnx")
     core_graph = so.delete_output(core_graph, "unknown")
 
     # Preprocessing Graph

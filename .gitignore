@@ -1,6 +1,6 @@
 /venv   
 /data
-/models
+/checkpoints
 
 .DS_Store
 
