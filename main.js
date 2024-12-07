@@ -131,6 +131,33 @@ function outputResults(cellNames, predictions, predictionClasses) {
 
   table.appendChild(tbody);
   resultsContainer.appendChild(table);
+
+  document
+    .getElementById("download_link")
+    .addEventListener("click", function (event) {
+      event.preventDefault();
+      let csvContent =
+        "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob\n";
+
+      cellNames.forEach((cellName, cellIndex) => {
+        let cellResults = "";
+        for (let i = 0; i < 3; i++) {
+          cellResults += `,${
+            predictionClasses[predictions[cellIndex][0][i]]
+          },${predictions[cellIndex][1][i].toFixed(4)}`;
+        }
+        csvContent += `${cellName}${cellResults}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const downloadLink = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      downloadLink.setAttribute("href", url);
+      downloadLink.setAttribute("download", "predictions.csv");
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    });
 }
 
 async function main() {

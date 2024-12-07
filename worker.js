@@ -47,7 +47,7 @@ function inflateGenes(
 
 self.onmessage = async function (event) {
   try {
-    self.postMessage({ type: "status", message: "Loading libraries" });
+    self.postMessage({ type: "status", message: "Loading model" });
     const { FS } = await h5wasm.ready;
     console.log("h5wasm loaded");
 
