@@ -47,7 +47,7 @@ function inflateGenes(
 
 self.onmessage = async function (event) {
   try {
-    self.postMessage({ type: "status", message: "Loading model" });
+    self.postMessage({ type: "status", message: "Loading libraries..." });
     const { FS } = await h5wasm.ready;
     console.log("h5wasm loaded");
 
@@ -59,7 +59,7 @@ self.onmessage = async function (event) {
     const currentModelGenes = (await response.text()).split("\n");
 
     // Load the model
-    self.postMessage({ type: "status", message: "Loading model" });
+    self.postMessage({ type: "status", message: "Loading model..." });
     ort.env.wasm.wasmPaths =
       "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
     // ort.env.numThreads = 16;

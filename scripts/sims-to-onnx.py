@@ -9,7 +9,6 @@ import argparse
 import numpy as np
 import torch
 import torch.onnx
-import anndata as ad
 from onnx import helper, TensorProto
 import sclblonnx as so
 
@@ -23,7 +22,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     model_name = args.checkpoint.split("/")[-1].split(".")[0]
-    # model_path = "/".join(args.checkpoint.split("/")[:-1])
     model_path = args.destination
 
     # Load the checkpoint
