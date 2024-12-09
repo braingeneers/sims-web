@@ -36,10 +36,8 @@ async function populateModelSelect(models) {
 
 let worker;
 
-async function predict(modelName, h5File, cellRangePercent) {
+async function predict(worker, modelName, h5File, cellRangePercent) {
   return new Promise((resolve, reject) => {
-    worker = new Worker("worker.js");
-
     worker.postMessage({ modelName, h5File, cellRangePercent });
 
     worker.onmessage = function (event) {
@@ -50,24 +48,26 @@ async function predict(modelName, h5File, cellRangePercent) {
         totalToProcess,
         totalNumCells,
         cellNames,
+        classes,
         predictions,
         elapsedTime,
         error,
       } = event.data;
 
       if (type === "status") {
-        document.getElementById("progress-bar").textContent = message;
+        document.getElementById("message").textContent = message;
       } else if (type === "progress") {
+        document.getElementById("message").textContent = message;
         const progress = Math.round((countFinished / totalToProcess) * 100);
         document.getElementById("progress-bar").style.width = `${progress}%`;
         document.getElementById("progress-bar").textContent = `${progress}%`;
       } else if (type === "result") {
         document.getElementById(
-          "elapsed-time"
+          "message"
         ).textContent = `${totalToProcess} of ${totalNumCells} cells in ${elapsedTime.toFixed(
           2
         )} minutes`;
-        resolve([cellNames, predictions]);
+        resolve([cellNames, classes, predictions]);
       } else if (type === "error") {
         reject(error);
       }
@@ -79,7 +79,7 @@ async function predict(modelName, h5File, cellRangePercent) {
   });
 }
 
-function outputResults(cellNames, predictions, predictionClasses) {
+function outputResults(cellNames, predictionClasses, predictions) {
   const resultsContainer = document.getElementById("results");
   resultsContainer.innerHTML = ""; // Clear previous results
 
@@ -219,10 +219,9 @@ async function main() {
     if (worker) {
       worker.terminate();
       worker = null;
-      document.getElementById("progress-bar").textContent = "Stopped";
+      document.getElementById("progress-bar").textContent = "";
       document.getElementById("progress-bar").style.width = "0%";
-      document.getElementById("elapsed-time").textContent =
-        "Prediction stopped";
+      document.getElementById("message").textContent = "Prediction stopped";
     }
   });
 
@@ -231,28 +230,25 @@ async function main() {
     .addEventListener("click", async (event) => {
       // Clear results at start of prediction
       document.getElementById("results").innerHTML = "";
-      document.getElementById("progress-bar").style.width = "100%";
+      document.getElementById("progress-bar").style.width = "0%";
       document.getElementById("progress-bar").textContent = "";
-      document.getElementById("elapsed-time").textContent = "";
+      document.getElementById("message").textContent = "";
 
-      let selectedModelName = document.getElementById("model_select").value;
+      let modelName = document.getElementById("model_select").value;
       const h5File = document.getElementById("file_input").files[0];
       const cellRangePercent = document.getElementById("cellRange").value;
 
-      // Load the model classes
-      const response = await fetch(`models/${selectedModelName}.classes`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const selectedModelClasses = (await response.text()).split("\n");
-
       try {
-        const [cellNames, predictions] = await predict(
-          selectedModelName,
+        if (!worker) {
+          worker = new Worker("worker.js");
+        }
+        const [cellNames, classes, predictions] = await predict(
+          worker,
+          modelName,
           h5File,
           cellRangePercent
         );
-        outputResults(cellNames, predictions, selectedModelClasses);
+        outputResults(cellNames, classes, predictions);
       } catch (error) {
         console.error("Error:", error);
       }
