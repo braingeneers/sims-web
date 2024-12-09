@@ -67,6 +67,7 @@ async function instantiateModel(name) {
     position += chunk.length;
   }
 
+  self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
   ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
   let options = { executionProviders: ["cpu"] };
