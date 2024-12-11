@@ -21,32 +21,13 @@ if __name__ == "__main__":
     model_name = args.onnx.split("/")[-1].split(".")[0]
     dest = os.path.dirname(args.onnx)
 
-    # Load the checkpoint
-    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
-    sims.model.eval()  # Turns off training mode
-
-    # Get an inflated sample
-    batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
-    x = batch[1].to(torch.float32)
-
-    # Run on sims and onnx and assert the logits are the same
-    model = onnx.load(args.onnx)
-    onnx_logits = so.run(model.graph, 
-                         inputs={"input": x.detach().numpy()}, 
-                         outputs=["logits"])[0][0]
-    sims_logits = sims.model(x)[0][0].detach().numpy()
-    np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
-
-    embedded_x = sims.model.network.embedder(x)
-    np.count_nonzero(embedded_x)
-
     # Load the current production model
     model = onnx.load(args.onnx)
     g = model.graph
 
-    # Expose the last concat output of 3 x 32, encodings? 
-    # candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
-    candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
+    # Expose the econding
+    candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
+    # candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
     shape_info = onnx.shape_inference.infer_shapes(model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
@@ -54,11 +35,11 @@ if __name__ == "__main__":
             break
     g.output.extend([node])
     so.list_outputs(g)
-    g = so.rename_output(g, candidate, "encoding")
+    g = so.rename_output(g, candidate, "encodings")
     so.list_outputs(g)
 
     # Expose the masks
-    candidate = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
+    candidate = "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0"
     shape_info = onnx.shape_inference.infer_shapes(model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
@@ -68,19 +49,41 @@ if __name__ == "__main__":
     g = so.rename_output(g, candidate, "mask")
     so.list_outputs(g)
 
+    # Save the enhanced model
     so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
 
-
+    # Load back in for comparison
     model = onnx.load(f"{dest}/{model_name}.explain.onnx")
     onnx.checker.check_model(model)
     so.list_outputs(model.graph)
-    result = so.run(model.graph, 
+
+    # Load the checkpoint so we can compare to the onnx output
+    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
+    sims.model.eval()  # Turns off training mode
+
+    # Get an inflated sample
+    batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
+    x = batch[1].to(torch.float32)
+
+    onnx_logits, onnx_mask, onnx_encodings = so.run(model.graph, 
                     inputs={"input": x.detach().numpy()},
-                    outputs=["encoding", "mask"])
+                    outputs=["logits", "mask", "encodings"])
+    onnx_logits = onnx_logits[0]
+    onnx_mask = onnx_mask[0]
 
-    np.count_nonzero(result[1][0])
-    np.nonzero(result[1][0])
+    sims_logits = sims.model(x)[0][0].detach().numpy()
 
+    # See if the logits are equivalent
+    np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
+
+
+    # See if the encodings are equivalent
+    sims_encodings = sims.model.network.tabnet.encoder(x)
+
+    np.testing.assert_array_almost_equal(
+        onnx_encodings[0][0],
+        sims_encodings[0][0][0].detach().numpy(),
+    )
 
 
     # # Get forward mask from tabnet
