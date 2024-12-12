@@ -10,7 +10,7 @@ import shutil
 import numpy as np
 import torch
 import torch.onnx
-from onnx import helper, TensorProto
+import onnx
 import sclblonnx as so
 
 from scsims import SIMS
@@ -19,7 +19,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export a SIMS model to ONNX")
     parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
     parser.add_argument("destination", type=str, help="Path to save the ONNX model")
-
     args = parser.parse_args()
 
     model_id = args.checkpoint.split("/")[-1].split(".")[0]
@@ -74,8 +73,11 @@ if __name__ == "__main__":
     """
 
     # Load the core model back in via onnx
-    core_graph = so.graph_from_file(f"{model_path}/{model_id}.onnx")
-    core_graph = so.delete_output(core_graph, "unknown")
+    core_model = onnx.load(f"{model_path}/{model_id}.onnx")
+    core_graph = core_model.graph
+
+    # core_graph = so.graph_from_file(f"{model_path}/{model_id}.onnx")
+    # core_graph = so.delete_output(core_graph, "unknown")
 
     # Preprocessing Graph
     pre_graph = so.empty_graph("preprocess")
@@ -87,19 +89,19 @@ if __name__ == "__main__":
 
     # Postprocessing Graph
     k_value = np.array([3], dtype=np.int64)
-    k_node = helper.make_node(
+    k_node = onnx.helper.make_node(
         'Constant',
         inputs=[], outputs=['K'],
-        value=helper.make_tensor(
+        value=onnx.helper.make_tensor(
             name='const_tensor_K',
-            data_type=TensorProto.INT64,
+            data_type=onnx.TensorProto.INT64,
             dims=[1],
             vals=k_value
         ),
         name='K'
     )
 
-    topk_node = helper.make_node(
+    topk_node = onnx.helper.make_node(
         'TopK',
         inputs=['logits', 'K'], outputs=['topk_values', 'topk_indices'],
         name='TopK',
@@ -108,7 +110,7 @@ if __name__ == "__main__":
         sorted=1   # Optional: set to 1 to return sorted values
     )
 
-    softmax_node = helper.make_node(
+    softmax_node = onnx.helper.make_node(
         'Softmax',
         inputs=['topk_values'], outputs=['probs'],
         name='Softmax',
@@ -120,10 +122,23 @@ if __name__ == "__main__":
 
     # Add outputs
     g.output.extend([
-        helper.make_tensor_value_info('topk_values', TensorProto.FLOAT, [None, 3]),
-        helper.make_tensor_value_info('topk_indices', TensorProto.INT64, [None, 3]),
-        helper.make_tensor_value_info('probs', TensorProto.FLOAT, [None, 3]),
+        onnx.helper.make_tensor_value_info('topk_values', onnx.TensorProto.FLOAT, [None, 3]),
+        onnx.helper.make_tensor_value_info('topk_indices', onnx.TensorProto.INT64, [None, 3]),
+        onnx.helper.make_tensor_value_info('probs', onnx.TensorProto.FLOAT, [None, 3]),
     ])
+
+    # Expose the encoding
+    candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
+    shape_info = onnx.shape_inference.infer_shapes(core_model.model)
+    for idx, node in enumerate(shape_info.graph.value_info):
+        if node.name == candidate:
+            print(idx, node)
+            break
+    assert node.name == candidate
+    g.output.extend([node])
+    so.list_outputs(g)
+    g = so.rename_output(g, candidate, "encoding")
+    so.list_outputs(g)
     
     # Save the final graph
     print(f"Exporting graph with pre, core and post processing to {model_path}/{model_id}.onnx")

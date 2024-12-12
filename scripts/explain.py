@@ -25,9 +25,9 @@ if __name__ == "__main__":
     model = onnx.load(args.onnx)
     g = model.graph
 
-    # Expose the encodings
-    candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
-    # candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
+    # Expose the encoding
+    # candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
+    candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
     shape_info = onnx.shape_inference.infer_shapes(model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
@@ -35,7 +35,7 @@ if __name__ == "__main__":
             break
     g.output.extend([node])
     so.list_outputs(g)
-    g = so.rename_output(g, candidate, "encodings")
+    g = so.rename_output(g, candidate, "encoding")
     so.list_outputs(g)
 
     # Expose the masks
@@ -65,9 +65,9 @@ if __name__ == "__main__":
     batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
     x = batch[1].to(torch.float32)
 
-    onnx_logits, onnx_mask, onnx_encodings = so.run(model.graph, 
+    onnx_logits, onnx_mask, onnx_encoding = so.run(model.graph, 
                     inputs={"input": x.detach().numpy()},
-                    outputs=["logits", "mask", "encodings"])
+                    outputs=["logits", "mask", "encoding"])
     onnx_logits = onnx_logits[0]
     onnx_mask = onnx_mask[0]
 
@@ -76,21 +76,17 @@ if __name__ == "__main__":
     # See if the logits are equivalent
     np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
 
-    # See if the encodings are equivalent
-    sims_encodings = sims.model.network.tabnet.encoder(x)
+    # See if the encoding are equivalent
+    sims_encoding = sims.model.network.tabnet.encoder(x)
     np.testing.assert_array_almost_equal(
-        onnx_encodings[0][0],
-        sims_encodings[0][0][0].detach().numpy(),
+        onnx_encoding[0][0],
+        sims_encoding[0][0][0].detach().numpy(),
     )
 
-
     # Get forward mask from tabnet
-    _, sims_masks = sims.model.network.forward_masks(x)
-
+    # _, sims_masks = sims.model.network.forward_masks(x)
     
-    sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
-
-idx = (-arr).argsort()[:n]
+    # sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
 
     # np.count_nonzero(explain.detach().numpy())
 
@@ -113,4 +109,4 @@ idx = (-arr).argsort()[:n]
     # embedded_x = sims.model.network.embedder(x)
     # a, b = sims.model.network.encoder(embedded_x)
 
-    graph = so.graph_from_file("models/default.onnx")
+    # graph = so.graph_from_file("models/default.onnx")
