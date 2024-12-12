@@ -3,7 +3,7 @@ async function fetchModelDescriptions(modelIDs) {
 
   for (const modelID of modelIDs) {
     try {
-      const response = await fetch(`models/${modelID}.desc.json`);
+      const response = await fetch(`models/${modelID}.json`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -25,7 +25,7 @@ async function populateModelSelect(modelDescriptions) {
   modelDescriptions.forEach((description) => {
     const option = document.createElement("option");
     option.value = description.id;
-    option.textContent = `${description.submitter}: ${description.title}`;
+    option.textContent = `${description.title}, ${description.submitter}`;
     fileSelect.appendChild(option);
   });
 }

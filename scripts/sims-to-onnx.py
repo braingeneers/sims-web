@@ -6,6 +6,7 @@ extended with pre and post processing steps to match those in the SIMS source.
 
 import os
 import argparse
+import shutil
 import numpy as np
 import torch
 import torch.onnx
@@ -21,7 +22,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    model_name = args.checkpoint.split("/")[-1].split(".")[0]
+    model_id = args.checkpoint.split("/")[-1].split(".")[0]
     model_path = args.destination
 
     # Load the checkpoint
@@ -41,21 +42,25 @@ if __name__ == "__main__":
     torch.onnx.export(
         sims.model,
         torch.zeros(batch_size, num_model_genes),
-        f"{model_path}/{model_name}.onnx",
+        f"{model_path}/{model_id}.onnx",
         training=torch.onnx.TrainingMode.EVAL,
         input_names=["input"],
         output_names=["logits","unknown"],
         export_params=True,
         opset_version=12,
     )
-    print(f"Exported interium model to {model_path}/{model_name}.onnx")
+    print(f"Exported interium model to {model_path}/{model_id}.onnx")
 
     # Write out the gene and class lists
-    with open(f"{model_path}/{model_name}.genes", "w") as f:
+    with open(f"{model_path}/{model_id}.genes", "w") as f:
         f.write("\n".join(map(str, sims.model.genes)))
-    with open(f"{model_path}/{model_name}.classes", "w") as f:
+    with open(f"{model_path}/{model_id}.classes", "w") as f:
         f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
-    print(f"Wrote out gene and classes lists to {model_path}/{model_name}.genes/.classes")
+    print(f"Wrote out gene and classes lists to {model_path}/{model_id}.genes/.classes")
+
+    # Copy over the description file from the checkpoints directory
+    shutil.copy(f"{os.path.dirname(args.checkpoint)}/{model_id}.json", args.destination)
+    print(f"Copied over description file to {model_path}")
 
     # Output a list of all models to populate the model selection drop down
     with open(f"{model_path}/models.txt", "w") as f:
@@ -69,7 +74,7 @@ if __name__ == "__main__":
     """
 
     # Load the core model back in via onnx
-    core_graph = so.graph_from_file(f"{model_path}/{model_name}.onnx")
+    core_graph = so.graph_from_file(f"{model_path}/{model_id}.onnx")
     core_graph = so.delete_output(core_graph, "unknown")
 
     # Preprocessing Graph
@@ -121,5 +126,5 @@ if __name__ == "__main__":
     ])
     
     # Save the final graph
-    print(f"Exporting graph with pre, core and post processing to {model_path}/{model_name}.onnx")
-    so.graph_to_file(g, f"{model_path}/{model_name}.onnx")
+    print(f"Exporting graph with pre, core and post processing to {model_path}/{model_id}.onnx")
+    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
