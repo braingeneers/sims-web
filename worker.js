@@ -1,5 +1,6 @@
 self.importScripts(
   "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.min.js",
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
   "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
 );
 
