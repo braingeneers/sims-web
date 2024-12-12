@@ -1,44 +1,40 @@
-async function getListOfFileNamesExcludingSuffix(path) {
-  try {
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+async function fetchModelDescriptions(modelIDs) {
+  const modelDescriptions = [];
+
+  for (const modelID of modelIDs) {
+    try {
+      const response = await fetch(`models/${modelID}.desc.json`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const description = await response.json();
+      description["id"] = modelID;
+      modelDescriptions.push(description);
+    } catch (error) {
+      console.error(`Failed to fetch description for ${modelID}:`, error);
     }
-    const text = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
-    const fileElements = doc.querySelectorAll("a"); // Assuming file names are in <a> tags
-    const fileNames = Array.from(fileElements).map((el) =>
-      el.textContent.trim()
-    );
-    const fileRoots = fileNames.map((name) => name.split(".")[0]);
-    const uniqueFileRoots = [...new Set(fileRoots)];
-    return uniqueFileRoots.filter((name) => name !== "");
-  } catch (error) {
-    console.error("Error fetching files:", error);
-    return [];
   }
+
+  return modelDescriptions;
 }
 
-async function populateModelSelect(models) {
+async function populateModelSelect(modelDescriptions) {
   const fileSelect = document.getElementById("model_select");
   fileSelect.innerHTML = ""; // Clear existing options
-  models.forEach((file) => {
+
+  modelDescriptions.forEach((description) => {
     const option = document.createElement("option");
-    option.value = file;
-    option.textContent = file;
-    if (file === "default") {
-      option.selected = true;
-    }
+    option.value = description.id;
+    option.textContent = `${description.submitter}: ${description.title}`;
     fileSelect.appendChild(option);
   });
 }
 
-let worker;
+let worker = null;
 
-async function predict(worker, modelName, h5File, cellRangePercent) {
+async function predict(worker, modelID, h5File, cellRangePercent) {
   return new Promise((resolve, reject) => {
-    worker.postMessage({ modelName, h5File, cellRangePercent });
+    worker.postMessage({ modelID, h5File, cellRangePercent });
 
     worker.onmessage = function (event) {
       const {
@@ -162,8 +158,9 @@ function outputResults(cellNames, predictionClasses, predictions) {
 
 async function main() {
   const response = await fetch("models/models.txt");
-  const modelNames = (await response.text()).split("\n");
-  populateModelSelect(modelNames);
+  const modelIDs = (await response.text()).split("\n");
+  const modelDescriptions = await fetchModelDescriptions(modelIDs);
+  populateModelSelect(modelDescriptions);
 
   // Update the label to show the file name
   document
@@ -234,7 +231,7 @@ async function main() {
       document.getElementById("progress-bar").textContent = "";
       document.getElementById("message").textContent = "";
 
-      let modelName = document.getElementById("model_select").value;
+      let modelID = document.getElementById("model_select").value;
       const h5File = document.getElementById("file_input").files[0];
       const cellRangePercent = document.getElementById("cellRange").value;
 
@@ -244,7 +241,7 @@ async function main() {
         }
         const [cellNames, classes, predictions] = await predict(
           worker,
-          modelName,
+          modelID,
           h5File,
           cellRangePercent
         );

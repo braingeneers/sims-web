@@ -25,7 +25,7 @@ if __name__ == "__main__":
     model = onnx.load(args.onnx)
     g = model.graph
 
-    # Expose the econding
+    # Expose the encodings
     candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
     # candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
     shape_info = onnx.shape_inference.infer_shapes(model)
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     so.list_outputs(g)
 
     # Expose the masks
-    candidate = "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0"
+    candidate = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
     shape_info = onnx.shape_inference.infer_shapes(model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
@@ -76,18 +76,22 @@ if __name__ == "__main__":
     # See if the logits are equivalent
     np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
 
-
     # See if the encodings are equivalent
     sims_encodings = sims.model.network.tabnet.encoder(x)
-
     np.testing.assert_array_almost_equal(
         onnx_encodings[0][0],
         sims_encodings[0][0][0].detach().numpy(),
     )
 
 
-    # # Get forward mask from tabnet
-    # explain, masks = sims.model.network.forward_masks(x)
+    # Get forward mask from tabnet
+    _, sims_masks = sims.model.network.forward_masks(x)
+
+    
+    sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
+
+idx = (-arr).argsort()[:n]
+
     # np.count_nonzero(explain.detach().numpy())
 
 

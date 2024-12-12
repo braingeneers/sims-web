@@ -5,27 +5,27 @@ self.importScripts(
 
 /**
  * Create an ONNX Runtime session for the selected model
- * @param {string} modelName - The name of the model to load
+ * @param {string} id - The id of the model to load
  * @returns {Promise} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(name) {
+async function instantiateModel(id) {
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`models/${name}.genes`);
+  let response = await fetch(`models/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const genes = (await response.text()).split("\n");
 
   // Load the model classes
-  response = await fetch(`models/${name}.classes`);
+  response = await fetch(`models/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
 
-  const modelUrl = `models/${name}.onnx`;
+  const modelUrl = `models/${id}.onnx`;
   response = await fetch(modelUrl);
 
   if (!response.ok) {
@@ -84,7 +84,7 @@ async function instantiateModel(name) {
   const session = await ort.InferenceSession.create(modelArray.buffer, options);
   console.log("Model Output names", session.outputNames);
 
-  return { name, session, genes, classes };
+  return { id, session, genes, classes };
 }
 
 function precomputeInflationIndices(currentModelGenes, sampleGenes) {
@@ -130,8 +130,8 @@ function inflateGenes(
 
 self.onmessage = async function (event) {
   try {
-    if (!self.model || self.model.name !== event.data.modelName) {
-      self.model = await instantiateModel(event.data.modelName);
+    if (!self.model || self.model.id !== event.data.modelID) {
+      self.model = await instantiateModel(event.data.modelID);
     }
 
     self.postMessage({ type: "status", message: "Loading libraries..." });
