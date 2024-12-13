@@ -76,11 +76,14 @@ async function predict(worker, modelID, h5File, cellRangePercent) {
   });
 }
 
-function createScatterPlot(encodings) {
+function createScatterPlot(encodings, predictions) {
   // Set the dimensions and margins of the graph
   const margin = { top: 10, right: 30, bottom: 30, left: 40 },
     width = 460 - margin.left - margin.right,
     height = 400 - margin.top - margin.bottom;
+
+  // Remove any existing SVG elements
+  d3.select("#scatter-plot").selectAll("*").remove();
 
   // Append the svg object to the body of the page
   const svg = d3
@@ -108,6 +111,9 @@ function createScatterPlot(encodings) {
     .range([height, 0]);
   svg.append("g").call(d3.axisLeft(y));
 
+  // Define color scale
+  const color = d3.scaleOrdinal(d3.schemeCategory10);
+
   // Add dots
   svg
     .append("g")
@@ -118,7 +124,7 @@ function createScatterPlot(encodings) {
     .attr("cx", (d) => x(d[0]))
     .attr("cy", (d) => y(d[1]))
     .attr("r", 3)
-    .style("fill", "#69b3a2");
+    .style("fill", (d, i) => color(predictions[i][0][0])); // Color based on the top prediction class
 }
 
 function outputResults(cellNames, predictionClasses, predictions) {
@@ -289,7 +295,7 @@ async function main() {
           h5File,
           cellRangePercent
         );
-        createScatterPlot(encodings);
+        createScatterPlot(encodings, predictions);
         outputResults(cellNames, classes, predictions);
       } catch (error) {
         console.error("Error:", error);
