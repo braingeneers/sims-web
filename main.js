@@ -46,6 +46,7 @@ async function predict(worker, modelID, h5File, cellRangePercent) {
         cellNames,
         classes,
         predictions,
+        encodings,
         elapsedTime,
         error,
       } = event.data;
@@ -63,7 +64,7 @@ async function predict(worker, modelID, h5File, cellRangePercent) {
         ).textContent = `${totalToProcess} of ${totalNumCells} cells in ${elapsedTime.toFixed(
           2
         )} minutes`;
-        resolve([cellNames, classes, predictions]);
+        resolve([cellNames, classes, predictions, encodings]);
       } else if (type === "error") {
         reject(error);
       }
@@ -73,6 +74,51 @@ async function predict(worker, modelID, h5File, cellRangePercent) {
       reject(error.message);
     };
   });
+}
+
+function createScatterPlot(encodings) {
+  // Set the dimensions and margins of the graph
+  const margin = { top: 10, right: 30, bottom: 30, left: 40 },
+    width = 460 - margin.left - margin.right,
+    height = 400 - margin.top - margin.bottom;
+
+  // Append the svg object to the body of the page
+  const svg = d3
+    .select("#scatter-plot")
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Add X axis
+  const x = d3
+    .scaleLinear()
+    .domain([d3.min(encodings, (d) => d[0]), d3.max(encodings, (d) => d[0])])
+    .range([0, width]);
+  svg
+    .append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x));
+
+  // Add Y axis
+  const y = d3
+    .scaleLinear()
+    .domain([d3.min(encodings, (d) => d[1]), d3.max(encodings, (d) => d[1])])
+    .range([height, 0]);
+  svg.append("g").call(d3.axisLeft(y));
+
+  // Add dots
+  svg
+    .append("g")
+    .selectAll("dot")
+    .data(encodings)
+    .enter()
+    .append("circle")
+    .attr("cx", (d) => x(d[0]))
+    .attr("cy", (d) => y(d[1]))
+    .attr("r", 3)
+    .style("fill", "#69b3a2");
 }
 
 function outputResults(cellNames, predictionClasses, predictions) {
@@ -239,12 +285,13 @@ async function main() {
         if (!worker) {
           worker = new Worker("worker.js");
         }
-        const [cellNames, classes, predictions] = await predict(
+        const [cellNames, classes, predictions, encodings] = await predict(
           worker,
           modelID,
           h5File,
           cellRangePercent
         );
+        createScatterPlot(encodings);
         outputResults(cellNames, classes, predictions);
       } catch (error) {
         console.error("Error:", error);

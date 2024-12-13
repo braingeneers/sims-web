@@ -30,6 +30,4 @@ if __name__ == "__main__":
         adata = adata[subset_indices, :].copy()
 
     # Write the processed data to an h5ad file
-    # output_file = args.sample.replace(".h5", ".h5ad")
-    # sc.write(output_file, adata)
-    # print(f"Processed data written to {output_file}")
+    sc.write(args.sample + "ad", adata)

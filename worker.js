@@ -1,7 +1,8 @@
 self.importScripts(
   "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.min.js",
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
-  "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js"
+  "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js",
+  "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
 );
 
 /**
@@ -190,6 +191,7 @@ self.onmessage = async function (event) {
     );
 
     const predictions = [];
+    const encodings = [];
     const inflationIndices = precomputeInflationIndices(
       self.model.genes,
       sampleGenes
@@ -209,6 +211,7 @@ self.onmessage = async function (event) {
 
       let output = await self.model.session.run({ input: inputTensor });
       predictions.push([output.topk_indices.cpuData, output.probs.cpuData]);
+      encodings.push(output.encoding.cpuData);
 
       // Post progress update
       const countFinished = cellIndex + 1;
@@ -220,6 +223,21 @@ self.onmessage = async function (event) {
       });
     }
 
+    const umap = new UMAP.UMAP({
+      nComponents: 2,
+      nEpochs: 400,
+      nNeighbors: 15,
+    });
+    const embeddings = await umap.fitAsync(encodings, (epochNumber) => {
+      // check progress and give user feedback, or return `false` to stop
+      self.postMessage({
+        type: "progress",
+        message: "Computing UMAP...",
+        countFinished: epochNumber,
+        totalToProcess: umap.getNEpochs(),
+      });
+    });
+
     FS.unmount("/work");
 
     const endTime = Date.now(); // Record end time
@@ -230,6 +248,7 @@ self.onmessage = async function (event) {
       cellNames,
       classes: self.model.classes,
       predictions,
+      encodings,
       elapsedTime,
       totalToProcess: cellNames.length,
       totalNumCells,
