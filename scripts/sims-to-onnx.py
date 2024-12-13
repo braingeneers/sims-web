@@ -64,7 +64,8 @@ if __name__ == "__main__":
     # Output a list of all models to populate the model selection drop down
     with open(f"{model_path}/models.txt", "w") as f:
         f.write("\n".join(list(set(f.split(".")[0] 
-                                   for f in os.listdir("models") if f != "models.txt"))))
+                                   for f in os.listdir("models") 
+                                   if f != "models.txt" and f != ".DS_Store"))))
     print(f"Wrote out list of all models to {model_path}/models.txt")
 
     """
@@ -129,15 +130,16 @@ if __name__ == "__main__":
 
     # Expose the encoding
     candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
-    shape_info = onnx.shape_inference.infer_shapes(core_model.model)
+    shape_info = onnx.shape_inference.infer_shapes(core_model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
             print(idx, node)
             break
     assert node.name == candidate
     g.output.extend([node])
-    so.list_outputs(g)
     g = so.rename_output(g, candidate, "encoding")
+
+    print("Final outputs:")
     so.list_outputs(g)
     
     # Save the final graph
