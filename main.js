@@ -122,9 +122,6 @@ function createScatterPlot(encodings) {
 }
 
 function outputResults(cellNames, predictionClasses, predictions) {
-  const resultsContainer = document.getElementById("results");
-  resultsContainer.innerHTML = ""; // Clear previous results
-
   const table = document.createElement("table");
   table.classList.add("table", "table-striped");
 
@@ -172,7 +169,7 @@ function outputResults(cellNames, predictionClasses, predictions) {
   });
 
   table.appendChild(tbody);
-  resultsContainer.appendChild(table);
+  document.getElementById("results").appendChild(table);
 
   document
     .getElementById("download_link")
@@ -272,6 +269,7 @@ async function main() {
     .getElementById("predict_btn")
     .addEventListener("click", async (event) => {
       // Clear results at start of prediction
+      document.getElementById("scatter-plot").innerHTML = "";
       document.getElementById("results").innerHTML = "";
       document.getElementById("progress-bar").style.width = "0%";
       document.getElementById("progress-bar").textContent = "";
