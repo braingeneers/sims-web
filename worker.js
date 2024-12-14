@@ -131,14 +131,14 @@ function inflateGenes(
 }
 
 self.onmessage = async function (event) {
+  self.postMessage({ type: "status", message: "Loading libraries..." });
+  const { FS } = await h5wasm.ready;
+  console.log("h5wasm loaded");
+
   try {
     if (!self.model || self.model.id !== event.data.modelID) {
       self.model = await instantiateModel(event.data.modelID);
     }
-
-    self.postMessage({ type: "status", message: "Loading libraries..." });
-    const { FS } = await h5wasm.ready;
-    console.log("h5wasm loaded");
 
     self.postMessage({ type: "status", message: "Loading file" });
     if (!FS.analyzePath("/work").exists) {
@@ -228,17 +228,15 @@ self.onmessage = async function (event) {
       nEpochs: 400,
       nNeighbors: 15,
     });
-    const embeddings = await umap.fitAsync(encodings, (epochNumber) => {
+    const coordinates = await umap.fitAsync(encodings, (epochNumber) => {
       // check progress and give user feedback, or return `false` to stop
       self.postMessage({
         type: "progress",
-        message: "Computing UMAP...",
+        message: "Computing coordinates...",
         countFinished: epochNumber,
         totalToProcess: umap.getNEpochs(),
       });
     });
-
-    FS.unmount("/work");
 
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
@@ -248,12 +246,13 @@ self.onmessage = async function (event) {
       cellNames,
       classes: self.model.classes,
       predictions,
-      encodings,
+      coordinates,
       elapsedTime,
       totalToProcess: cellNames.length,
       totalNumCells,
     });
   } catch (error) {
     self.postMessage({ type: "error", error: error.message });
+    FS.unmount("/work");
   }
 };
