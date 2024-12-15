@@ -152,22 +152,33 @@ self.onmessage = async function (event) {
     console.log(`Top level keys: ${annData.keys()}`);
 
     let cellNames = [];
-    let sampleGenes = [];
     if (annData.get("obs").type == "Dataset") {
       cellNames = annData.get("obs").value.map((e) => e[0]);
-      sampleGenes = annData.get("var").value.map((e) => e[0]);
     } else if (annData.get("obs").type == "Group") {
       if (annData.get("obs").keys().includes("index")) {
         cellNames = annData.get("obs/index").value;
-        sampleGenes = annData.get("var/index").value;
       } else if (annData.get("obs").keys().includes("_index")) {
         cellNames = annData.get("obs/_index").value;
-        sampleGenes = annData.get("var/_index").value;
       } else {
         throw new Error("Could not find cell names");
       }
     } else {
       throw new Error("Could not find cell names");
+    }
+
+    let sampleGenes = [];
+    if (annData.get("var").type == "Dataset") {
+      sampleGenes = annData.get("var").value.map((e) => e[0]);
+    } else if (annData.get("var").type == "Group") {
+      if (annData.get("var").keys().includes("index")) {
+        sampleGenes = annData.get("var/index").value;
+      } else if (annData.get("var").keys().includes("_index")) {
+        sampleGenes = annData.get("var/_index").value;
+      } else {
+        throw new Error("Could not find genes");
+      }
+    } else {
+      throw new Error("Could not find genes");
     }
 
     const totalNumCells = cellNames.length;
@@ -238,6 +249,9 @@ self.onmessage = async function (event) {
       });
     });
 
+    annData.close();
+    FS.unmount("/work");
+
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
     // Post final result
@@ -252,7 +266,7 @@ self.onmessage = async function (event) {
       totalNumCells,
     });
   } catch (error) {
-    self.postMessage({ type: "error", error: error.message });
     FS.unmount("/work");
+    self.postMessage({ type: "error", error: error.message });
   }
 };
