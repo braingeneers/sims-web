@@ -8,37 +8,52 @@
 </head>
 
 <body>
+    <input type="file" id="file_input" accept=".h5ad">
 </body>
 
 <script type="module">
     import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/esm/hdf5_hl.js";
 
-    // Load h5wasm asynchronously
-    const Module = await h5wasm.ready;
-    console.log("h5wasm loaded")
+    document.getElementById('file_input').focus();
+    document.getElementById('file_input').addEventListener('change', async function (e) {
+        console.log(e.target.files[0]);
 
-    // then get the FileSystem object from the Module:
-    const { FS } = Module;
+        const Module = await h5wasm.ready;
+        const { FS } = Module;
+        console.log("h5wasm loaded");
 
-    // Or, you can directly get the FS if you don't care about the rest 
-    // of the module:
-    // const { FS } = await h5wasm.ready;
+        const work_dir = await FS.mkdir("/work");
+        const fs_mount = await FS.mount(
+            FS.filesystems.WORKERFS,
+            { files: [e.target.files[0]] },
+            "/work"
+        );
 
-    // Load an h5ad file
-    let response = await fetch("sample.h5ad");
-    let ab = await response.arrayBuffer();
+        const annData = new h5wasm.File(`/work/${e.target.files[0].name}`, "r+");
+        console.log(annData);
+        // Load an h5ad file from the server and write to the file system and open
+        // let response = await fetch("data/test.h5ad");
+        // let ab = await response.arrayBuffer();
+        // FS.writeFile("temp.h5ad", new Uint8Array(ab));
 
-    // Write to the clients file system
-    FS.writeFile("temp.h5ad", new Uint8Array(ab));
+        // Then open the file using h5wasm
+        let f = new h5wasm.File("temp.h5ad", "a");
+        console.log(f);
 
-    // Then open the file using h5wasm
-    let f = new h5wasm.File("temp.h5ad", "r");
-    console.log(f);
+        f.create_group("foo");
 
-    document.write(`<div>Top Level Keys: ${f.keys()}</div>`);
-    document.write(`<div>X shape: ${f.get("X").shape}</div>`);
-    document.write(`<div>Genes: ${f.get("var/index").value.slice(0, 10)}...</div>`);
-    document.write(`<div>X Cell 0 Expression: ${f.get("X").value.slice(0, 10)}...</div>`);
+        f.get("foo").create_dataset({ name: "bar", data: [3.1, 4.1, 0.0, -1.0] });
+
+        f.flush();
+        f.close();
+
+        console.log("Done.")
+
+        // document.write(`<div>Top Level Keys: ${f.keys()}</div>`);
+        // document.write(`<div>X shape: ${f.get("X").shape}</div>`);
+        // document.write(`<div>Genes: ${f.get("var/index").value.slice(0, 10)}...</div>`);
+        // document.write(`<div>X Cell 0 Expression: ${f.get("X").value.slice(0, 10)}...</div>`);
+    });
 </script>
 
 </html>
