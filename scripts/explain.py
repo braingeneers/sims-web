@@ -36,37 +36,46 @@ if __name__ == "__main__":
     x = batch[1].to(torch.float32)
 
     # Get forward mask from tabnet
-    M_explain, masks = sims.model.network.forward_masks(x)
+    M_explain, sims_masks = sims.model.network.forward_masks(x)
 
     # Expose the attention mask 0
-    candidate = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
-    # Load the current production model
-    model = onnx.load(args.onnx)
-    g = model.graph
-    shape_info = onnx.shape_inference.infer_shapes(model)
-    for idx, node in enumerate(shape_info.graph.value_info):
-        if node.name == candidate:
-            print(node)
-            break
-    assert node.name == candidate
-    model.graph.output.extend([node])
-    g = so.rename_output(g, candidate, "mask")
-    so.list_outputs(g)
-    onnx_logits, onnx_mask, onnx_encoding = so.run(
-        model.graph,
-        inputs={"input": x.detach().numpy()},
-        outputs=["logits", "mask", "encoding"],
-    )
-    onnx_logits = onnx_logits[0]
-    onnx_mask = onnx_mask[0]
-    print(onnx_mask.shape)
-    np.count_nonzero(masks[0][0].detach().numpy())
-    np.count_nonzero(onnx_mask)
-    np.nonzero(masks[0][0].detach().numpy())
-    np.nonzero(onnx_mask)
-    np.testing.assert_array_almost_equal(
-        masks[0][0].detach().numpy(), onnx_mask, decimal=5
-    )
+    onnx_masks = []
+    for i, candidate in enumerate([
+        "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0",
+        "/network/tabnet/encoder/att_transformers.1/selector/Clip_output_0",
+        "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0",
+    ]):
+        # Load the current production model
+        print(candidate)
+        model = onnx.load(args.onnx)
+        g = model.graph
+        shape_info = onnx.shape_inference.infer_shapes(model)
+        for idx, node in enumerate(shape_info.graph.value_info):
+            if node.name == candidate:
+                # print(node)
+                break
+        assert node.name == candidate
+        model.graph.output.extend([node])
+        g = so.rename_output(g, candidate, "mask")
+        onnx_mask = so.run(
+            model.graph,
+            inputs={"input": x.detach().numpy()},
+            outputs=["mask"],
+        )
+        onnx_masks.append(onnx_mask[0])
+
+        # Compare the first mask
+        np.count_nonzero(sims_masks[0][0].detach().numpy())
+        np.count_nonzero(onnx_masks[0])
+        np.nonzero(sims_masks[0][0].detach().numpy())
+        np.nonzero(onnx_masks[0])
+        np.testing.assert_array_almost_equal(
+            sims_masks[0][0].detach().numpy(), onnx_masks[0][0], decimal=5
+        )
+
+        i = 2
+        np.nonzero(sims_masks[i][0].detach().numpy())
+        np.nonzero(onnx_masks[i][0])
 
     # # Save the enhanced model
     # so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
