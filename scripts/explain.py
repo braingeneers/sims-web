@@ -12,7 +12,9 @@ import sclblonnx as so
 from scsims import SIMS
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Explain an AnnData object using a SIMS model")
+    parser = argparse.ArgumentParser(
+        description="Explain an AnnData object using a SIMS model"
+    )
     parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
     parser.add_argument("onnx", type=str, help="Path to the onnx file")
     parser.add_argument("sample", type=str, help="Path to the sample for validation")
@@ -21,92 +23,84 @@ if __name__ == "__main__":
     model_name = args.onnx.split("/")[-1].split(".")[0]
     dest = os.path.dirname(args.onnx)
 
-    # Load the current production model
-    model = onnx.load(args.onnx)
-    g = model.graph
-
-    # Expose the encoding
-    # candidate = "/network/tabnet/Concat_output_0"  # 3 x 32
-    candidate = "/network/tabnet/ReduceSum_output_0"  # 32, 
-    shape_info = onnx.shape_inference.infer_shapes(model)
-    for idx, node in enumerate(shape_info.graph.value_info):
-        if node.name == candidate:
-            print(idx, node)
-            break
-    g.output.extend([node])
-    so.list_outputs(g)
-    g = so.rename_output(g, candidate, "encoding")
-    so.list_outputs(g)
-
-    # Expose the masks
-    candidate = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
-    shape_info = onnx.shape_inference.infer_shapes(model)
-    for idx, node in enumerate(shape_info.graph.value_info):
-        if node.name == candidate:
-            print(node)
-            break
-    model.graph.output.extend([node])
-    g = so.rename_output(g, candidate, "mask")
-    so.list_outputs(g)
-
-    # Save the enhanced model
-    so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
-
-    # Load back in for comparison
-    model = onnx.load(f"{dest}/{model_name}.explain.onnx")
-    onnx.checker.check_model(model)
-    so.list_outputs(model.graph)
-
     # Load the checkpoint so we can compare to the onnx output
-    sims = SIMS(weights_path=args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
-    sims.model.eval()  # Turns off training mode
+    sims = SIMS(
+        weights_path=args.checkpoint,
+        map_location=torch.device("cpu"),
+        weights_only=True,
+    )
+    _ = sims.model.eval()  # Turns off training mode
 
     # Get an inflated sample
     batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
     x = batch[1].to(torch.float32)
 
-    onnx_logits, onnx_mask, onnx_encoding = so.run(model.graph, 
-                    inputs={"input": x.detach().numpy()},
-                    outputs=["logits", "mask", "encoding"])
+    # Get forward mask from tabnet
+    M_explain, masks = sims.model.network.forward_masks(x)
+
+    # Expose the attention mask 0
+    candidate = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
+    # Load the current production model
+    model = onnx.load(args.onnx)
+    g = model.graph
+    shape_info = onnx.shape_inference.infer_shapes(model)
+    for idx, node in enumerate(shape_info.graph.value_info):
+        if node.name == candidate:
+            print(node)
+            break
+    assert node.name == candidate
+    model.graph.output.extend([node])
+    g = so.rename_output(g, candidate, "mask")
+    so.list_outputs(g)
+    onnx_logits, onnx_mask, onnx_encoding = so.run(
+        model.graph,
+        inputs={"input": x.detach().numpy()},
+        outputs=["logits", "mask", "encoding"],
+    )
     onnx_logits = onnx_logits[0]
     onnx_mask = onnx_mask[0]
-
-    sims_logits = sims.model(x)[0][0].detach().numpy()
-
-    # See if the logits are equivalent
-    np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
-
-    # See if the encoding are equivalent
-    sims_encoding = sims.model.network.tabnet.encoder(x)
+    print(onnx_mask.shape)
+    np.count_nonzero(masks[0][0].detach().numpy())
+    np.count_nonzero(onnx_mask)
+    np.nonzero(masks[0][0].detach().numpy())
+    np.nonzero(onnx_mask)
     np.testing.assert_array_almost_equal(
-        onnx_encoding[0][0],
-        sims_encoding[0][0][0].detach().numpy(),
+        masks[0][0].detach().numpy(), onnx_mask, decimal=5
     )
 
-    # Get forward mask from tabnet
-    # _, sims_masks = sims.model.network.forward_masks(x)
-    
-    # sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
+    # # Save the enhanced model
+    # so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
 
-    # np.count_nonzero(explain.detach().numpy())
+    # # Load back in for comparison
+    # model = onnx.load(f"{dest}/{model_name}.explain.onnx")
+    # onnx.checker.check_model(model)
+    # so.list_outputs(model.graph)
 
+    # sims_logits = sims.model(x)[0][0].detach().numpy()
 
-    # # Predict the cell types and get an explanation matrix
-    # cell_predictions = sims.predict(args.sample)
-    # explainability_matrix = sims.explain(args.sample)
+    # # See if the logits are equivalent
+    # np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
 
-    
-    # a = explainability_matrix[0][0]
-    # b = explain.detach().numpy()
-    # np.max(np.setdiff1d(a, b))
+    # # See if the encoding are equivalent
+    # sims_encoding = sims.model.network.tabnet.encoder(x)
+    # np.testing.assert_array_almost_equal(
+    #     onnx_encoding[0][0],
+    #     sims_encoding[0][0][0].detach().numpy(),
+    # )
 
+    # # sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
 
+    # # np.count_nonzero(explain.detach().numpy())
 
+    # # # Predict the cell types and get an explanation matrix
+    # # cell_predictions = sims.predict(args.sample)
+    # # explainability_matrix = sims.explain(args.sample)
 
+    # # a = explainability_matrix[0][0]
+    # # b = explain.detach().numpy()
+    # # np.max(np.setdiff1d(a, b))
 
+    # # embedded_x = sims.model.network.embedder(x)
+    # # a, b = sims.model.network.encoder(embedded_x)
 
-
-    # embedded_x = sims.model.network.embedder(x)
-    # a, b = sims.model.network.encoder(embedded_x)
-
-    # graph = so.graph_from_file("models/default.onnx")
+    # # graph = so.graph_from_file("models/default.onnx")
