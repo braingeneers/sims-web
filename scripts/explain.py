@@ -35,16 +35,24 @@ if __name__ == "__main__":
     batch = next(enumerate(sims.model._parse_data(args.sample, batch_size=1)))
     x = batch[1].to(torch.float32)
 
-    # Get forward mask from tabnet
+    # Get SIMS explain for just the first sample
+    sims_explain, _ = sims.explain(args.sample, batch_size=1, rows=0)
+    # np.count_nonzero(res_explain[0])
+    # np.nonzero(res_explain[0])
+
+    # Get forward and forward mask from tabnet
     M_explain, sims_masks = sims.model.network.forward_masks(x)
+    # steps_output, M_loss = sims.model.network.forward(x)
 
     # Expose the attention mask 0
     onnx_masks = []
-    for i, candidate in enumerate([
-        "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0",
-        "/network/tabnet/encoder/att_transformers.1/selector/Clip_output_0",
-        "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0",
-    ]):
+    for i, candidate in enumerate(
+        [
+            "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0",
+            "/network/tabnet/encoder/att_transformers.1/selector/Clip_output_0",
+            "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0",
+        ]
+    ):
         # Load the current production model
         print(candidate)
         model = onnx.load(args.onnx)
@@ -62,54 +70,107 @@ if __name__ == "__main__":
             inputs={"input": x.detach().numpy()},
             outputs=["mask"],
         )
-        onnx_masks.append(onnx_mask[0])
+        onnx_masks.append(onnx_mask[0][0])
 
-        # Compare the first mask
-        np.count_nonzero(sims_masks[0][0].detach().numpy())
-        np.count_nonzero(onnx_masks[0])
-        np.nonzero(sims_masks[0][0].detach().numpy())
-        np.nonzero(onnx_masks[0])
-        np.testing.assert_array_almost_equal(
-            sims_masks[0][0].detach().numpy(), onnx_masks[0][0], decimal=5
+    # Verify first mask
+    i = 0
+    np.count_nonzero(sims_masks[i][0].detach().numpy())
+    np.count_nonzero(onnx_masks[i])
+    np.nonzero(sims_masks[i][0].detach().numpy())
+    np.nonzero(onnx_masks[i])
+    np.testing.assert_array_almost_equal(
+        sims_masks[i][0].detach().numpy(), onnx_masks[i], decimal=5
+    )
+
+    onnx_explain = np.sum(onnx_masks, axis=0)
+
+    def top_indices(arr, k):
+        top_k_indices = np.argpartition(arr, -k)[-k:]
+        return top_k_indices[np.argsort(arr[top_k_indices])[::-1]]
+
+    k = 10
+    top_indices(sims_explain[0], k)
+    top_indices(onnx_explain, k)
+
+    # How many genes are in common?
+    len(
+        set(top_indices(sims_explain[0], 10)).intersection(
+            set(top_indices(onnx_explain, 10))
         )
+    )
+    len(
+        set(top_indices(sims_explain[0], 20)).intersection(
+            set(top_indices(onnx_explain, 20))
+        )
+    )
+    len(
+        set(top_indices(sims_explain[0], 30)).intersection(
+            set(top_indices(onnx_explain, 30))
+        )
+    )
+    len(
+        set(top_indices(sims_explain[0], 40)).intersection(
+            set(top_indices(onnx_explain, 40))
+        )
+    )
 
-        i = 2
-        np.nonzero(sims_masks[i][0].detach().numpy())
-        np.nonzero(onnx_masks[i][0])
 
-    # # Save the enhanced model
-    # so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
+# # Save the enhanced model
+# so.graph_to_file(g, f"{dest}/{model_name}.explain.onnx")
 
-    # # Load back in for comparison
-    # model = onnx.load(f"{dest}/{model_name}.explain.onnx")
-    # onnx.checker.check_model(model)
-    # so.list_outputs(model.graph)
+# # Load back in for comparison
+# model = onnx.load(f"{dest}/{model_name}.explain.onnx")
+# onnx.checker.check_model(model)
+# so.list_outputs(model.graph)
 
-    # sims_logits = sims.model(x)[0][0].detach().numpy()
+# sims_logits = sims.model(x)[0][0].detach().numpy()
 
-    # # See if the logits are equivalent
-    # np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
+# # See if the logits are equivalent
+# np.testing.assert_array_almost_equal(onnx_logits, sims_logits, decimal=3)
 
-    # # See if the encoding are equivalent
-    # sims_encoding = sims.model.network.tabnet.encoder(x)
-    # np.testing.assert_array_almost_equal(
-    #     onnx_encoding[0][0],
-    #     sims_encoding[0][0][0].detach().numpy(),
-    # )
+# # See if the encoding are equivalent
+# sims_encoding = sims.model.network.tabnet.encoder(x)
+# np.testing.assert_array_almost_equal(
+#     onnx_encoding[0][0],
+#     sims_encoding[0][0][0].detach().numpy(),
+# )
 
-    # # sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
+# # sims_top_ind = (-sims_masks[0].detach().numpy()).argsort()[:4]
 
-    # # np.count_nonzero(explain.detach().numpy())
+# # np.count_nonzero(explain.detach().numpy())
 
-    # # # Predict the cell types and get an explanation matrix
-    # # cell_predictions = sims.predict(args.sample)
-    # # explainability_matrix = sims.explain(args.sample)
+# # # Predict the cell types and get an explanation matrix
+# # cell_predictions = sims.predict(args.sample)
+# # explainability_matrix = sims.explain(args.sample)
 
-    # # a = explainability_matrix[0][0]
-    # # b = explain.detach().numpy()
-    # # np.max(np.setdiff1d(a, b))
+# # a = explainability_matrix[0][0]
+# # b = explain.detach().numpy()
+# # np.max(np.setdiff1d(a, b))
 
-    # # embedded_x = sims.model.network.embedder(x)
-    # # a, b = sims.model.network.encoder(embedded_x)
+# # embedded_x = sims.model.network.embedder(x)
+# # a, b = sims.model.network.encoder(embedded_x)
 
-    # # graph = so.graph_from_file("models/default.onnx")
+# # graph = so.graph_from_file("models/default.onnx")
+
+# # Look at random nodes
+# for i, candidate in enumerate([
+#     "/network/tabnet/encoder/Mul_3_output_0",
+# ]):
+#     # Load the current production model
+#     print(candidate)
+#     model = onnx.load(args.onnx)
+#     g = model.graph
+#     shape_info = onnx.shape_inference.infer_shapes(model)
+#     for idx, node in enumerate(shape_info.graph.value_info):
+#         if node.name == candidate:
+#             # print(node)
+#             break
+#     assert node.name == candidate
+#     model.graph.output.extend([node])
+#     g = so.rename_output(g, candidate, "foo")
+#     foo = so.run(
+#         model.graph,
+#         inputs={"input": x.detach().numpy()},
+#         outputs=["foo"],
+#     )
+#     # print(np.count_nonzero(foo[0][0]))
