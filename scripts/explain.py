@@ -154,7 +154,9 @@ if __name__ == "__main__":
 
 # # Look at random nodes
 # for i, candidate in enumerate([
-#     "/network/tabnet/encoder/Mul_3_output_0",
+#     "/network/tabnet/encoder/feat_transformers.0/specifics/glu_layers.1/Sigmoid_output_0",
+#     "/network/tabnet/encoder/feat_transformers.1/specifics/glu_layers.1/Sigmoid_output_0",
+#     "/network/tabnet/encoder/feat_transformers.2/specifics/glu_layers.1/Sigmoid_output_0",
 # ]):
 #     # Load the current production model
 #     print(candidate)
@@ -173,4 +175,4 @@ if __name__ == "__main__":
 #         inputs={"input": x.detach().numpy()},
 #         outputs=["foo"],
 #     )
-#     # print(np.count_nonzero(foo[0][0]))
+#     print(np.count_nonzero(foo[0][0]))

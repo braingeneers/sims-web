@@ -97,7 +97,10 @@ function createScatterPlot(coordinates, predictions) {
   // Add X axis
   const x = d3
     .scaleLinear()
-    .domain([d3.min(coordinates, (d) => d[0]), d3.max(coordinates, (d) => d[0])])
+    .domain([
+      d3.min(coordinates, (d) => d[0]),
+      d3.max(coordinates, (d) => d[0]),
+    ])
     .range([0, width]);
   svg
     .append("g")
@@ -107,7 +110,10 @@ function createScatterPlot(coordinates, predictions) {
   // Add Y axis
   const y = d3
     .scaleLinear()
-    .domain([d3.min(coordinates, (d) => d[1]), d3.max(coordinates, (d) => d[1])])
+    .domain([
+      d3.min(coordinates, (d) => d[1]),
+      d3.max(coordinates, (d) => d[1]),
+    ])
     .range([height, 0]);
   svg.append("g").call(d3.axisLeft(y));
 
@@ -127,7 +133,7 @@ function createScatterPlot(coordinates, predictions) {
     .style("fill", (d, i) => color(predictions[i][0][0])); // Color based on the top prediction class
 }
 
-function outputResults(cellNames, predictionClasses, predictions) {
+function outputResults(cellNames, predictionClasses, predictions, coordinates) {
   const table = document.createElement("table");
   table.classList.add("table", "table-striped");
 
@@ -182,7 +188,7 @@ function outputResults(cellNames, predictionClasses, predictions) {
     .addEventListener("click", function (event) {
       event.preventDefault();
       let csvContent =
-        "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob\n";
+        "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
 
       cellNames.forEach((cellName, cellIndex) => {
         let cellResults = "";
@@ -191,6 +197,7 @@ function outputResults(cellNames, predictionClasses, predictions) {
             predictionClasses[predictions[cellIndex][0][i]]
           },${predictions[cellIndex][1][i].toFixed(4)}`;
         }
+        cellResults += `,${coordinates[cellIndex][0]},${coordinates[cellIndex][1]}`;
         csvContent += `${cellName}${cellResults}\n`;
       });
 
@@ -296,7 +303,7 @@ async function main() {
           cellRangePercent
         );
         createScatterPlot(coordinates, predictions);
-        outputResults(cellNames, classes, predictions);
+        outputResults(cellNames, classes, predictions, coordinates);
       } catch (error) {
         console.error("Error:", error);
       }
