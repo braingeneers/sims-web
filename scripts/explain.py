@@ -65,12 +65,12 @@ if __name__ == "__main__":
         assert node.name == candidate
         model.graph.output.extend([node])
         g = so.rename_output(g, candidate, "mask")
-        onnx_mask = so.run(
+        onnx_mask, onnx_attention = so.run(
             model.graph,
             inputs={"input": x.detach().numpy()},
-            outputs=["mask"],
+            outputs=["mask", "attention"],
         )
-        onnx_masks.append(onnx_mask[0][0])
+        onnx_masks.append(onnx_mask[0])
 
     # Verify first mask
     i = 0
@@ -83,6 +83,12 @@ if __name__ == "__main__":
     )
 
     onnx_explain = np.sum(onnx_masks, axis=0)
+
+    # Verify the saved attention as sum of the clip output nodes matches ours here
+    np.testing.assert_array_almost_equal(
+        onnx_explain, onnx_attention[0], decimal=5
+    )
+
 
     def top_indices(arr, k):
         top_k_indices = np.argpartition(arr, -k)[-k:]
