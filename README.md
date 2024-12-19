@@ -38,6 +38,10 @@ make serve
 
 Processing a test sample with 2638 cells took 67 seconds in the browser vs. 34 seconds in python on the same machine.
 
+# Leveraging a GPU
+
+ONNX Web Runtime does have support for GPUs, but unfortunately they don't support all operators yet. Specifically TopK is not [supported](https://github.com/microsoft/onnxruntime/blob/main/js/web/docs/webgpu-operators.md)
+
 # References
 
 [Open Neural Network Exchange (ONNX)](https://onnx.ai/)

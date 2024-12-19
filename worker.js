@@ -1,5 +1,4 @@
 self.importScripts(
-  "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.min.js",
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
   "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js",
   "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
@@ -22,7 +21,7 @@ self.addEventListener("message", async function (event) {
       genes: self.model.genes,
     });
   } else if (type === "resetAttentionAccumulator") {
-    attentionAccumulator = new Float32Array(self.model.genes.length);
+    attentionAccumulator = null;
     self.postMessage({ type: "attentionAccumulatorReset" });
   }
 });
@@ -251,6 +250,10 @@ async function predict(event) {
 
       encodings.push(output.encoding.cpuData);
 
+      if (!attentionAccumulator) {
+        attentionAccumulator = new Float32Array(genes.length);
+      }
+
       for (let i = 0; i < attentionAccumulator.length; i++) {
         attentionAccumulator[i] += output.attention.cpuData[i];
       }
@@ -300,4 +303,4 @@ async function predict(event) {
     FS.unmount("/work");
     self.postMessage({ type: "error", error: error.message });
   }
-};
+}
