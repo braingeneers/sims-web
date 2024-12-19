@@ -4,25 +4,21 @@ self.importScripts(
   "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
 );
 
-// Global variables for accumulators
-let attentionAccumulator = null;
+// Global variables
+self.model = null;
+self.attentionAccumulator = null;
 
 self.addEventListener("message", async function (event) {
   const { type } = event.data;
 
   if (type === "startPrediction") {
     predict(event);
-    // Handle prediction as shown above
-    // ...
   } else if (type === "getAttentionAccumulator") {
     self.postMessage({
       type: "attentionAccumulator",
-      attentionAccumulator: attentionAccumulator.buffer,
+      attentionAccumulator: self.attentionAccumulator.buffer,
       genes: self.model.genes,
     });
-  } else if (type === "resetAttentionAccumulator") {
-    attentionAccumulator = null;
-    self.postMessage({ type: "attentionAccumulatorReset" });
   }
 });
 
@@ -97,18 +93,15 @@ async function instantiateModel(id) {
 
   if (location.hostname === "localhost") {
     ort.env.debug = true;
-    ort.env.logLevel = "verbose";
-    ort.env.trace = true;
-    options["logSeverityLevel"] = 0;
-    options["logVerbosityLevel"] = 0;
+    // ort.env.logLevel = "verbose";
+    // ort.env.trace = true;
+    // options["logSeverityLevel"] = 0;
+    // options["logVerbosityLevel"] = 0;
   }
 
   // Create the InferenceSession with the model ArrayBuffer
   const session = await ort.InferenceSession.create(modelArray.buffer, options);
   console.log("Model Output names", session.outputNames);
-
-  // Initialize attention accumulator
-  attentionAccumulator = new Float32Array(genes.length);
 
   return { id, session, genes, classes };
 }
@@ -163,6 +156,9 @@ async function predict(event) {
     if (!self.model || self.model.id !== event.data.modelID) {
       self.model = await instantiateModel(event.data.modelID);
     }
+
+    // Reset attention accumulator
+    self.attentionAccumulator = new Float32Array(self.model.genes.length);
 
     self.postMessage({ type: "status", message: "Loading file" });
     if (!FS.analyzePath("/work").exists) {
@@ -250,12 +246,8 @@ async function predict(event) {
 
       encodings.push(output.encoding.cpuData);
 
-      if (!attentionAccumulator) {
-        attentionAccumulator = new Float32Array(genes.length);
-      }
-
-      for (let i = 0; i < attentionAccumulator.length; i++) {
-        attentionAccumulator[i] += output.attention.cpuData[i];
+      for (let i = 0; i < self.attentionAccumulator.length; i++) {
+        self.attentionAccumulator[i] += output.attention.cpuData[i];
       }
 
       // Post progress update
@@ -273,15 +265,22 @@ async function predict(event) {
       nEpochs: 400,
       nNeighbors: 15,
     });
-    const coordinates = await umap.fitAsync(encodings, (epochNumber) => {
-      // check progress and give user feedback, or return `false` to stop
-      self.postMessage({
-        type: "progress",
-        message: "Computing coordinates...",
-        countFinished: epochNumber,
-        totalToProcess: umap.getNEpochs(),
+
+    let coordinates = null;
+    try {
+      coordinates = await umap.fitAsync(encodings, (epochNumber) => {
+        // check progress and give user feedback, or return `false` to stop
+        self.postMessage({
+          type: "progress",
+          message: "Computing coordinates...",
+          countFinished: epochNumber,
+          totalToProcess: umap.getNEpochs(),
+        });
       });
-    });
+    } catch (error) {
+      self.postMessage({ type: "error", error });
+      throw error;
+    }
 
     annData.close();
     FS.unmount("/work");
@@ -301,6 +300,6 @@ async function predict(event) {
     });
   } catch (error) {
     FS.unmount("/work");
-    self.postMessage({ type: "error", error: error.message });
+    self.postMessage({ type: "error", error: error });
   }
 }

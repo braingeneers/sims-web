@@ -71,7 +71,8 @@ async function predict(worker, modelID, h5File, cellRangePercent) {
         )} minutes`;
         resolve([cellNames, classes, predictions, coordinates]);
       } else if (type === "error") {
-        reject(error);
+        document.getElementById("message").textContent = error.message;
+        // reject(error);
       }
     };
 
@@ -309,9 +310,6 @@ async function main() {
         if (!worker) {
           worker = new Worker("worker.js");
         }
-
-        // Reset the attention accumulator
-        worker.postMessage({ type: "resetAttentionAccumulator" });
 
         const [cellNames, classes, predictions, coordinates] = await predict(
           worker,
