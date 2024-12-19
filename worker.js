@@ -5,6 +5,28 @@ self.importScripts(
   "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
 );
 
+// Global variables for accumulators
+let attentionAccumulator = null;
+
+self.addEventListener("message", async function (event) {
+  const { type } = event.data;
+
+  if (type === "startPrediction") {
+    predict(event);
+    // Handle prediction as shown above
+    // ...
+  } else if (type === "getAttentionAccumulator") {
+    self.postMessage({
+      type: "attentionAccumulator",
+      attentionAccumulator: attentionAccumulator.buffer,
+      genes: self.model.genes,
+    });
+  } else if (type === "resetAttentionAccumulator") {
+    attentionAccumulator = new Float32Array(self.model.genes.length);
+    self.postMessage({ type: "attentionAccumulatorReset" });
+  }
+});
+
 /**
  * Create an ONNX Runtime session for the selected model
  * @param {string} id - The id of the model to load
@@ -86,6 +108,9 @@ async function instantiateModel(id) {
   const session = await ort.InferenceSession.create(modelArray.buffer, options);
   console.log("Model Output names", session.outputNames);
 
+  // Initialize attention accumulator
+  attentionAccumulator = new Float32Array(genes.length);
+
   return { id, session, genes, classes };
 }
 
@@ -130,7 +155,7 @@ function inflateGenes(
   }
 }
 
-self.onmessage = async function (event) {
+async function predict(event) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const { FS } = await h5wasm.ready;
   console.log("h5wasm loaded");
@@ -221,8 +246,14 @@ self.onmessage = async function (event) {
       );
 
       let output = await self.model.session.run({ input: inputTensor });
+
       predictions.push([output.topk_indices.cpuData, output.probs.cpuData]);
+
       encodings.push(output.encoding.cpuData);
+
+      for (let i = 0; i < attentionAccumulator.length; i++) {
+        attentionAccumulator[i] += output.attention.cpuData[i];
+      }
 
       // Post progress update
       const countFinished = cellIndex + 1;

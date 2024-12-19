@@ -34,7 +34,12 @@ let worker = null;
 
 async function predict(worker, modelID, h5File, cellRangePercent) {
   return new Promise((resolve, reject) => {
-    worker.postMessage({ modelID, h5File, cellRangePercent });
+    worker.postMessage({
+      type: "startPrediction",
+      modelID,
+      h5File,
+      cellRangePercent,
+    });
 
     worker.onmessage = function (event) {
       const {
@@ -278,12 +283,20 @@ async function main() {
     }
   });
 
+  // Function to get the top N indices
+  function getTopIndices(array, n) {
+    let indices = Array.from(array.keys());
+    indices.sort((a, b) => array[b] - array[a]);
+    return indices.slice(0, n);
+  }
+
   document
     .getElementById("predict_btn")
     .addEventListener("click", async (event) => {
       // Clear results at start of prediction
       document.getElementById("scatter-plot").innerHTML = "";
       document.getElementById("results").innerHTML = "";
+      document.getElementById("top-genes").innerHTML = "";
       document.getElementById("progress-bar").style.width = "0%";
       document.getElementById("progress-bar").textContent = "";
       document.getElementById("message").textContent = "";
@@ -296,12 +309,39 @@ async function main() {
         if (!worker) {
           worker = new Worker("worker.js");
         }
+
+        // Reset the attention accumulator
+        worker.postMessage({ type: "resetAttentionAccumulator" });
+
         const [cellNames, classes, predictions, coordinates] = await predict(
           worker,
           modelID,
           h5File,
           cellRangePercent
         );
+
+        // After prediction, request the attention accumulator
+        worker.postMessage({ type: "getAttentionAccumulator" });
+
+        // Handle the attention accumulator message
+        worker.onmessage = function (event) {
+          const { type, attentionAccumulator, genes } = event.data;
+
+          if (type === "attentionAccumulator") {
+            const attentionArray = new Float32Array(attentionAccumulator);
+            const topIndices = getTopIndices(attentionArray, 10);
+            const topGenes = topIndices.map((idx) => genes[idx]);
+
+            // Display top genes
+            let topGenesList = topGenes
+              .map((gene, idx) => `${gene}`)
+              .join(", ");
+            document.getElementById(
+              "top-genes"
+            ).innerHTML = `<div>Top genes driving predictions:</div><div>${topGenesList}</div>`;
+          }
+        };
+
         createScatterPlot(coordinates, predictions);
         outputResults(cellNames, classes, predictions, coordinates);
       } catch (error) {
