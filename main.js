@@ -332,11 +332,11 @@ async function main() {
 
             // Display top genes
             let topGenesList = topGenes
-              .map((gene, idx) => `${gene}`)
-              .join(", ");
+              .map((gene, idx) => `<li>${gene}</li>`)
+              .join("");
             document.getElementById(
               "top-genes"
-            ).innerHTML = `<div>Top genes driving predictions:</div><div>${topGenesList}</div>`;
+            ).innerHTML = `<div>Top 10 Genes:</div><ul>${topGenesList}</ul>`;
           }
         };
 
