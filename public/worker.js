@@ -287,15 +287,14 @@ async function predict(event) {
 
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
-    // Post final result
     self.postMessage({
-      type: "result",
+      type: "predictions",
       cellNames,
       classes: self.model.classes,
       predictions,
       coordinates,
       elapsedTime,
-      totalToProcess: cellNames.length,
+      totalProcessed: cellNames.length,
       totalNumCells,
     });
   } catch (error) {

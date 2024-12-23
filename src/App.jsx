@@ -22,6 +22,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Paper from "@mui/material/Paper";
 
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
@@ -30,8 +31,11 @@ import GitHubIcon from "@mui/icons-material/GitHub";
 import * as d3 from "d3";
 
 function PredictionsTable({ predictions }) {
+  if (!predictions) {
+    return <div>Nothing yet</div>; // Return an empty div
+  }
   return (
-    <TableContainer component={predictions}>
+    <TableContainer>
       <Table sx={{ minWidth: 650 }} aria-label="simple table">
         <TableHead>
           <TableRow>
@@ -40,18 +44,17 @@ function PredictionsTable({ predictions }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {predictions.map((row) => (
+          {predictions.cellNames.map((cellName, cellIndex) => (
             <TableRow
-              key={row.name}
+              key={cellName}
               sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
             >
               <TableCell component="th" scope="row">
-                {row.name}
+                {cellName}
               </TableCell>
-              <TableCell align="right">{row.calories}</TableCell>
-              <TableCell align="right">{row.fat}</TableCell>
-              <TableCell align="right">{row.carbs}</TableCell>
-              <TableCell align="right">{row.protein}</TableCell>
+              <TableCell align="right">
+                {predictions.predictions[cellIndex][1][0].toFixed(4)}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -69,7 +72,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [isPredicting, setIsPredicting] = useState(false);
   const [topGenes, setTopGenes] = useState([]);
-  const [predictions, setPredictions] = useState([]);
+  const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
 
   const scatterPlotRef = useRef(null);
@@ -157,8 +160,8 @@ function App() {
             Math.round((data.countFinished / data.totalToProcess) * 100)
           );
           break;
-        case "result":
-          setPredictions(data.predictions);
+        case "predictions":
+          setPredictions(data);
           setStatusMessage(
             `Processed ${data.totalToProcess} of ${
               data.totalNumCells
