@@ -3,6 +3,7 @@ import {
   Container,
   Typography,
   Button,
+  IconButton,
   Select,
   MenuItem,
   InputLabel,
@@ -22,11 +23,11 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import Paper from "@mui/material/Paper";
 
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
 import GitHubIcon from "@mui/icons-material/GitHub";
+import DownloadIcon from "@mui/icons-material/Download";
 
 import * as d3 from "d3";
 
@@ -61,6 +62,34 @@ function PredictionsTable({ predictions }) {
       </Table>
     </TableContainer>
   );
+}
+
+function downloadCSV(predictions) {
+  if (!predictions) {
+    return;
+  }
+  let csvContent =
+    "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
+
+  predictions.cellNames.forEach((cellName, cellIndex) => {
+    let cellResults = "";
+    for (let i = 0; i < 3; i++) {
+      cellResults += `,${
+        predictions.classes[predictions.predictions[cellIndex][0][i]]
+      },${predictions.predictions[cellIndex][1][i].toFixed(4)}`;
+    }
+    cellResults += `,${predictions.coordinates[cellIndex][0]},${predictions.coordinates[cellIndex][1]}`;
+    csvContent += `${cellName}${cellResults}\n`;
+  });
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const downloadLink = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  downloadLink.setAttribute("href", url);
+  downloadLink.setAttribute("download", "predictions.csv");
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
 }
 
 function App() {
@@ -337,6 +366,14 @@ function App() {
           >
             Stop
           </Button>
+          <IconButton
+            onClick={() => downloadCSV(predictions)}
+            disabled={predictions === null}
+            color="primary"
+            style={{ float: "right" }}
+          >
+            <DownloadIcon />
+          </IconButton>
         </Box>
       </Box>
 
