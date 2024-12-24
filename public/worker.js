@@ -221,7 +221,7 @@ async function predict(event) {
       [1, model.genes.length]
     );
 
-    const predictions = [];
+    const labels = [];
     const encodings = [];
     const inflationIndices = precomputeInflationIndices(
       self.model.genes,
@@ -242,7 +242,7 @@ async function predict(event) {
 
       let output = await self.model.session.run({ input: inputTensor });
 
-      predictions.push([output.topk_indices.cpuData, output.probs.cpuData]);
+      labels.push([output.topk_indices.cpuData, output.probs.cpuData]);
 
       encodings.push(output.encoding.cpuData);
 
@@ -291,7 +291,7 @@ async function predict(event) {
       type: "predictions",
       cellNames,
       classes: self.model.classes,
-      predictions,
+      labels,
       coordinates,
       elapsedTime,
       totalProcessed: cellNames.length,

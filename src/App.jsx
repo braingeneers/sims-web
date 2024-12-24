@@ -17,100 +17,14 @@ import {
   ListItemText,
 } from "@mui/material";
 
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import DownloadIcon from "@mui/icons-material/Download";
 
+import { PredictionsTable, downloadCSV } from "./PredictionsTable";
+
 import * as d3 from "d3";
-
-function PredictionsTable({ predictions }) {
-  if (!predictions) {
-    return <div>Nothing yet</div>; // Return an empty div
-  }
-  return (
-    <TableContainer>
-      <Table sx={{ minWidth: 650 }} aria-label="simple table">
-        <TableHead>
-          <TableRow>
-            <TableCell>Cell</TableCell>
-            <TableCell>Class 1</TableCell>
-            <TableCell>Prob 1</TableCell>
-            <TableCell>Class 2</TableCell>
-            <TableCell>Prob 2</TableCell>
-            <TableCell>Class 3</TableCell>
-            <TableCell>Prob 3</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {predictions.cellNames.map((cellName, cellIndex) => (
-            <TableRow
-              key={cellName}
-              sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
-            >
-              <TableCell component="th" scope="row">
-                {cellName}
-              </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.predictions[cellIndex][0][0]]}
-              </TableCell>
-              <TableCell>
-                {predictions.predictions[cellIndex][1][0].toFixed(4)}
-              </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.predictions[cellIndex][0][1]]}
-              </TableCell>
-              <TableCell>
-                {predictions.predictions[cellIndex][1][1].toFixed(4)}
-              </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.predictions[cellIndex][0][2]]}
-              </TableCell>
-              <TableCell>
-                {predictions.predictions[cellIndex][1][2].toFixed(4)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-}
-
-function downloadCSV(predictions) {
-  if (!predictions) {
-    return;
-  }
-  let csvContent =
-    "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
-
-  predictions.cellNames.forEach((cellName, cellIndex) => {
-    let cellResults = "";
-    for (let i = 0; i < 3; i++) {
-      cellResults += `,${
-        predictions.classes[predictions.predictions[cellIndex][0][i]]
-      },${predictions.predictions[cellIndex][1][i].toFixed(4)}`;
-    }
-    cellResults += `,${predictions.coordinates[cellIndex][0]},${predictions.coordinates[cellIndex][1]}`;
-    csvContent += `${cellName}${cellResults}\n`;
-  });
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const downloadLink = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  downloadLink.setAttribute("href", url);
-  downloadLink.setAttribute("download", "predictions.csv");
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
-}
 
 function App() {
   const [modelInfoList, setModelInfoList] = useState([]);
@@ -217,7 +131,7 @@ function App() {
             } cells in ${data.elapsedTime?.toFixed(2)} minutes`
           );
           // Create scatter plot
-          drawScatterPlot(data.coordinates, data.predictions);
+          drawScatterPlot(data.coordinates, data.labels);
           // You can also build your HTML table here if you like
           // or store the results in state to display in a React component.
           // After we have results, ask for attention accumulator
