@@ -1,8 +1,12 @@
 import h5wasm from "h5wasm";
 import * as UMAP from "umap-js";
 
+// Includes WebAssembly backend only
+// import * as ort from "onnxruntime-web/wasm";
 import * as ort from "onnxruntime-web";
-// import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/+esm";
+
+// Includes WebAssembly single-threaded only, with training support
+// import * as ort from "onnxruntime-web/training";
 
 // Global variables
 self.model = null;
@@ -87,7 +91,7 @@ async function instantiateModel(id) {
 
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
-  ort.env.wasm.wasmPaths = "/dist/";
+  // ort.env.wasm.wasmPaths = "/dist/";
   let options = { executionProviders: ["cpu"] };
 
   if (location.hostname === "localhost") {

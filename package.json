@@ -8,7 +8,9 @@
     "dev-debug": "vite --debug",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview-debug": "vite preview --debug",
+    "serve-dist-python": "python -m http.server 3000 -d dist/"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
