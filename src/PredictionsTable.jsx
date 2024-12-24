@@ -37,7 +37,7 @@ export function downloadCSV(predictions) {
 
 export function PredictionsTable({ predictions }) {
   if (!predictions) {
-    return <div>Nothing yet</div>; // Return an empty div
+    return <div></div>; // Return an empty div
   }
   return (
     <TableContainer>

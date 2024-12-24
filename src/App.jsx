@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -25,6 +25,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { PredictionsTable, downloadCSV } from "./PredictionsTable";
 
 import * as d3 from "d3";
+
+import SIMSWorker from "./worker?worker";
 
 function App() {
   const [modelInfoList, setModelInfoList] = useState([]);
@@ -104,7 +106,7 @@ function App() {
     if (workerInstance) {
       workerInstance.terminate();
     }
-    const newWorker = new Worker("/worker.js");
+    const newWorker = new SIMSWorker();
     setWorkerInstance(newWorker);
     setIsPredicting(true);
     setStatusMessage("Starting prediction...");
@@ -325,7 +327,7 @@ function App() {
         <Box width="25%" mr={4}>
           <Typography variant="h6">Top 10 Genes</Typography>
           <List dense>
-            {topGenes.map((gene, i) => (
+            {topGenes.map((gene) => (
               <ListItem key={gene}>
                 <ListItemText primary={`${gene}`} />
               </ListItem>

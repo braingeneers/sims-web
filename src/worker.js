@@ -1,8 +1,8 @@
-self.importScripts(
-  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
-  "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js",
-  "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
-);
+import h5wasm from "h5wasm";
+import * as UMAP from "umap-js";
+
+import * as ort from "onnxruntime-web";
+// import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/+esm";
 
 // Global variables
 self.model = null;
@@ -31,20 +31,20 @@ async function instantiateModel(id) {
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`models/${id}.genes`);
+  let response = await fetch(`/models/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const genes = (await response.text()).split("\n");
 
   // Load the model classes
-  response = await fetch(`models/${id}.classes`);
+  response = await fetch(`/models/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
 
-  const modelUrl = `models/${id}.onnx`;
+  const modelUrl = `/models/${id}.onnx`;
   response = await fetch(modelUrl);
 
   if (!response.ok) {
@@ -67,7 +67,6 @@ async function instantiateModel(id) {
     if (done) break;
     chunks.push(value);
     loadedBytes += value.length;
-    const progress = Math.round((loadedBytes / totalBytes) * 100);
 
     // Send progress update to the main thread
     self.postMessage({
@@ -88,15 +87,15 @@ async function instantiateModel(id) {
 
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+  ort.env.wasm.wasmPaths = "/dist/";
   let options = { executionProviders: ["cpu"] };
 
   if (location.hostname === "localhost") {
     ort.env.debug = true;
-    // ort.env.logLevel = "verbose";
-    // ort.env.trace = true;
-    // options["logSeverityLevel"] = 0;
-    // options["logVerbosityLevel"] = 0;
+    ort.env.logLevel = "verbose";
+    ort.env.trace = true;
+    options["logSeverityLevel"] = 0;
+    options["logVerbosityLevel"] = 0;
   }
 
   // Create the InferenceSession with the model ArrayBuffer
@@ -149,7 +148,8 @@ function inflateGenes(
 
 async function predict(event) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
-  const { FS } = await h5wasm.ready;
+  const Module = await h5wasm.ready;
+  const { FS } = Module;
   console.log("h5wasm loaded");
 
   try {
@@ -298,7 +298,7 @@ async function predict(event) {
       totalNumCells,
     });
   } catch (error) {
-    FS.unmount("/work");
+    // FS.unmount("/work");
     self.postMessage({ type: "error", error: error });
   }
 }
