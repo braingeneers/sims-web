@@ -6,7 +6,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ["onnxruntime-web"],
   },
-  base: "/sims-web",
+  // base: "", // Relative base path so we can live anywhere
   plugins: [
     react(),
     viteStaticCopy({

@@ -35,24 +35,26 @@ async function instantiateModel(id) {
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`/models/${id}.genes`);
+  let response = await fetch(`${self.location.origin}/models/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const genes = (await response.text()).split("\n");
+  console.log("Model Genes", genes.slice(0, 5));
 
   // Load the model classes
-  response = await fetch(`/models/${id}.classes`);
+  response = await fetch(`${self.location.origin}/models/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
+  console.log("Model Classes", classes);
 
-  const modelUrl = `/models/${id}.onnx`;
+  const modelUrl = `${self.location.origin}/models/${id}.onnx`;
   response = await fetch(modelUrl);
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw new Error(`Error fetching onnx file: ${response.status}`);
   }
 
   const contentLength = response.headers.get("Content-Length");

@@ -51,13 +51,14 @@ function App() {
 
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
-    const sitePath =
-      window.location.origin +
-      window.location.pathname.slice(
-        0,
-        window.location.pathname.lastIndexOf("/")
-      );
-    const fileUrl = `${sitePath}/sample.h5ad`;
+    // const sitePath =
+    //   window.location.origin +
+    //   window.location.pathname.slice(
+    //     0,
+    //     window.location.pathname.lastIndexOf("/")
+    //   );
+    // const fileUrl = `${sitePath}/sample.h5ad`;
+    const fileUrl = "sample.h5ad";
     const fileName = "sample.h5ad";
 
     try {
