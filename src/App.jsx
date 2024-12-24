@@ -41,7 +41,12 @@ function PredictionsTable({ predictions }) {
         <TableHead>
           <TableRow>
             <TableCell>Cell</TableCell>
-            <TableCell align="right">Class</TableCell>
+            <TableCell>Class 1</TableCell>
+            <TableCell>Prob 1</TableCell>
+            <TableCell>Class 2</TableCell>
+            <TableCell>Prob 2</TableCell>
+            <TableCell>Class 3</TableCell>
+            <TableCell>Prob 3</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -53,8 +58,23 @@ function PredictionsTable({ predictions }) {
               <TableCell component="th" scope="row">
                 {cellName}
               </TableCell>
-              <TableCell align="right">
+              <TableCell>
+                {predictions.classes[predictions.predictions[cellIndex][0][0]]}
+              </TableCell>
+              <TableCell>
                 {predictions.predictions[cellIndex][1][0].toFixed(4)}
+              </TableCell>
+              <TableCell>
+                {predictions.classes[predictions.predictions[cellIndex][0][1]]}
+              </TableCell>
+              <TableCell>
+                {predictions.predictions[cellIndex][1][1].toFixed(4)}
+              </TableCell>
+              <TableCell>
+                {predictions.classes[predictions.predictions[cellIndex][0][2]]}
+              </TableCell>
+              <TableCell>
+                {predictions.predictions[cellIndex][1][2].toFixed(4)}
               </TableCell>
             </TableRow>
           ))}
