@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -22,9 +22,8 @@ import NewspaperIcon from "@mui/icons-material/Newspaper";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import DownloadIcon from "@mui/icons-material/Download";
 
-import { PredictionsTable, downloadCSV } from "./PredictionsTable";
-
-import * as d3 from "d3";
+import { PredictionsTable } from "./PredictionsTable";
+import { PredictionsPlot } from "./PredictionsPlot";
 
 import SIMSWorker from "./worker?worker";
 
@@ -40,8 +39,37 @@ function App() {
   const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
 
-  const scatterPlotRef = useRef(null);
   const resultsRef = useRef(null);
+
+  function downloadCSV(predictions) {
+    if (!predictions) {
+      return;
+    }
+    let csvContent =
+      "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
+
+    predictions.cellNames.forEach((cellName, cellIndex) => {
+      let cellResults = "";
+      for (let i = 0; i < 3; i++) {
+        cellResults += `,${
+          predictions.classes[predictions.labels[cellIndex][0][i]]
+        },${predictions.labels[cellIndex][1][i].toFixed(4)}`;
+      }
+      cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
+        4
+      )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
+      csvContent += `${cellName}${cellResults}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const downloadLink = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    downloadLink.setAttribute("href", url);
+    downloadLink.setAttribute("download", "predictions.csv");
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  }
 
   const sitePath =
     window.location.origin +
@@ -97,6 +125,9 @@ function App() {
 
   // Start prediction
   async function handlePredict() {
+    // Clear existing output
+    setTopGenes([]);
+    setPredictions(null);
     if (!selectedModel || !selectedFile) {
       setStatusMessage("Please select a model and file.");
       return;
@@ -130,11 +161,6 @@ function App() {
               data.totalNumCells
             } cells in ${data.elapsedTime?.toFixed(2)} minutes`
           );
-          // Create scatter plot
-          drawScatterPlot(data.coordinates, data.labels);
-          // You can also build your HTML table here if you like
-          // or store the results in state to display in a React component.
-          // After we have results, ask for attention accumulator
           newWorker.postMessage({ type: "getAttentionAccumulator" });
           setIsPredicting(false);
           break;
@@ -168,50 +194,6 @@ function App() {
     setStatusMessage("Prediction stopped.");
     setIsPredicting(false);
     setProgress(0);
-  }
-
-  // D3 scatter plot
-  function drawScatterPlot(coordinates, predictions) {
-    if (!scatterPlotRef.current) return;
-    // Clear existing
-    d3.select(scatterPlotRef.current).selectAll("*").remove();
-
-    const margin = { top: 10, right: 30, bottom: 30, left: 40 };
-    const width = 460 - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
-
-    const svg = d3
-      .select(scatterPlotRef.current)
-      .append("svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
-
-    const x = d3
-      .scaleLinear()
-      .domain(d3.extent(coordinates, (d) => d[0]))
-      .range([0, width]);
-    const y = d3
-      .scaleLinear()
-      .domain(d3.extent(coordinates, (d) => d[1]))
-      .range([height, 0]);
-    svg
-      .append("g")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x));
-    svg.append("g").call(d3.axisLeft(y));
-
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
-    svg
-      .selectAll("circle")
-      .data(coordinates)
-      .enter()
-      .append("circle")
-      .attr("cx", (d) => x(d[0]))
-      .attr("cy", (d) => y(d[1]))
-      .attr("r", 3)
-      .style("fill", (d, i) => color(predictions[i][0][0]));
   }
 
   // Parse top genes
@@ -324,7 +306,9 @@ function App() {
       {/* Layout for top genes + scatter plot */}
       <Box display="flex" mt={4}>
         <Box width="25%" mr={4}>
-          <Typography variant="h6">Top 10 Genes</Typography>
+          <Typography variant="h6">
+            {topGenes.length ? "Top 10 Genes" : ""}
+          </Typography>
           <List dense>
             {topGenes.map((gene) => (
               <ListItem key={gene}>
@@ -333,7 +317,7 @@ function App() {
             ))}
           </List>
         </Box>
-        <Box ref={scatterPlotRef} width="75%" minHeight={400}></Box>
+        <PredictionsPlot width={450} height={450} predictions={predictions} />
       </Box>
 
       {/* Container for table or results */}

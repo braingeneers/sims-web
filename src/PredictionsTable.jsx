@@ -1,4 +1,5 @@
-import React from "react";
+// import React from "react";
+import PropTypes from "prop-types";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -6,37 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 
-export function downloadCSV(predictions) {
-  if (!predictions) {
-    return;
-  }
-  let csvContent =
-    "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
-
-  predictions.cellNames.forEach((cellName, cellIndex) => {
-    let cellResults = "";
-    for (let i = 0; i < 3; i++) {
-      cellResults += `,${
-        predictions.classes[predictions.labels[cellIndex][0][i]]
-      },${predictions.labels[cellIndex][1][i].toFixed(4)}`;
-    }
-    cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
-      4
-    )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
-    csvContent += `${cellName}${cellResults}\n`;
-  });
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const downloadLink = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  downloadLink.setAttribute("href", url);
-  downloadLink.setAttribute("download", "predictions.csv");
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
-}
-
-export function PredictionsTable({ predictions }) {
+export const PredictionsTable = ({ predictions }) => {
   if (!predictions) {
     return <div></div>; // Return an empty div
   }
@@ -87,4 +58,17 @@ export function PredictionsTable({ predictions }) {
       </Table>
     </TableContainer>
   );
-}
+};
+
+PredictionsTable.propTypes = {
+  predictions: PropTypes.shape({
+    labels: PropTypes.arrayOf(
+      PropTypes.arrayOf([PropTypes.string, PropTypes.float])
+    ),
+    coordinates: PropTypes.arrayOf(
+      PropTypes.arrayOf([PropTypes.float, PropTypes.float])
+    ),
+    cellNames: PropTypes.arrayOf(PropTypes.string),
+    classes: PropTypes.arrayOf(PropTypes.string),
+  }),
+};
