@@ -1,105 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/css/bootstrap.min.css"
-        integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.3.0/font/bootstrap-icons.css">
-    <title>SIMS Web</title>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="./vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIMS Web</title>
+  <script type="module" crossorigin src="./assets/index-BjEUkyxb.js"></script>
 </head>
 
 <body>
-    <div class="container">
-        <div class="row">
-            <div class="col">
-                <div class="mb-3 mt-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3 mt-3">
-                        <h2 class="mb-0" style="font-weight: 300">SIMS Web</h2>
-                        <div>
-                            <!-- Link to SIMS paper -->
-                            <a href="https://www.cell.com/cell-genomics/abstract/S2666-979X(24)00165-4" target="_blank"
-                                aria-label="View the published SIMS paper" class="me-3">
-                                <i class="bi bi-journal-text" style="font-size: 1.5rem; color: black;"></i>
-                            </a>
-                            <!-- Link to GitHub repository -->
-                            <a href="https://github.com/braingeneers/sims-web" target="_blank"
-                                aria-label="View source on GitHub">
-                                <i class="bi bi-github" style="font-size: 1.5rem; color: black;"></i>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="form-group mb-3">
-                        <label for="model_select">Select a model:</label>
-                        <select class="form-control" id="model_select">
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-                    <div class="form-group mb-3">
-                        <label for="file_input">Select an AnnData/Scanpy (.h5ad) file</label>
-                        <div class="custom-file">
-                            <input type="file" class="custom-file-input" name="file_input" id="file_input"
-                                accept=".h5ad">
-                            <label id="file_input_label" class="custom-file-label" for="file_input">Select an
-                                AnnData/Scanpy
-                                (.h5ad) file</label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="cellRange">% Of Cells To Process:</label>
-                        <input type="range" class="custom-range" id="cellRange" min="0" max="100" step="1" value="25">
-                        <small id="cellRangeValue" class="form-text text-muted">25%</small>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mt-3">
-                        <div>
-                            <button id="predict_btn" class="btn btn-primary" autofocus>Predict</button>
-                            <button id="stop_btn" class="btn btn-danger">Stop</button>
-                        </div>
-                        <a href="#" id="download_link" class="btn btn-link">
-                            <i class="bi bi-download" style="font-size: 1.5rem;"></i>
-                        </a>
-                    </div>
-                </div>
-                <div class="progress">
-                    <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
-                        id="progress-bar"></div>
-                </div>
-                <div id="message" class="mb-3 mt-3"></div>
-                <div class="row">
-                    <div class="col-md-3">
-                        <div id="top-genes" class="mb-3 mt-3"></div>
-                    </div>
-                    <div class="col-md-9">
-                        <div id="scatter-plot" class="mb-3 mt-3"></div>
-                    </div>
-                </div>
-                <div id="results" class="mb-3 mt-3">
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-YJPPM0MB84"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag() { dataLayer.push(arguments); }
-        gtag('js', new Date());
-
-        gtag('config', 'G-YJPPM0MB84');
-    </script>
-    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
-        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.6/dist/umd/popper.min.js"
-        integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.2.1/dist/js/bootstrap.min.js"
-        integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k"
-        crossorigin="anonymous"></script>
-    <script src="https://d3js.org/d3.v4.js"></script>
-    <script type="module" src="main.js"></script>
+  <div id="root"></div>
 </body>
 
 </html>
