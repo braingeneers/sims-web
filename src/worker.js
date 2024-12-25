@@ -1,8 +1,12 @@
-self.importScripts(
-  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
-  "https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.min.js",
-  "https://cdn.jsdelivr.net/npm/umap-js@1.4.0/lib/umap-js.min.js"
-);
+import h5wasm from "h5wasm";
+import * as UMAP from "umap-js";
+
+// Includes WebAssembly backend only
+// import * as ort from "onnxruntime-web/wasm";
+import * as ort from "onnxruntime-web";
+
+// Includes WebAssembly single-threaded only, with training support
+// import * as ort from "onnxruntime-web/training";
 
 // Global variables
 self.model = null;
@@ -16,7 +20,7 @@ self.addEventListener("message", async function (event) {
   } else if (type === "getAttentionAccumulator") {
     self.postMessage({
       type: "attentionAccumulator",
-      attentionAccumulator: self.attentionAccumulator.buffer,
+      attentionAccumulator: self.attentionAccumulator,
       genes: self.model.genes,
     });
   }
@@ -27,31 +31,31 @@ self.addEventListener("message", async function (event) {
  * @param {string} id - The id of the model to load
  * @returns {Promise} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(id) {
+async function instantiateModel(modelsURL, id) {
+  console.log(`Instantiating model ${id} from ${modelsURL}`);
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`models/${id}.genes`);
+  let response = await fetch(`${modelsURL}/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const genes = (await response.text()).split("\n");
+  console.log("Model Genes", genes.slice(0, 5));
 
   // Load the model classes
-  response = await fetch(`models/${id}.classes`);
+  response = await fetch(`${modelsURL}/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
+  console.log("Model Classes", classes);
 
-  const modelUrl = `models/${id}.onnx`;
-  response = await fetch(modelUrl);
-
+  response = await fetch(`${modelsURL}/${id}.onnx`);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw new Error(`Error fetching onnx file: ${response.status}`);
   }
-
-  const contentLength = response.headers.get("Content-Length");
+  const contentLength = response.headers.get("content-length");
   if (!contentLength) {
     throw new Error("Content-Length header is missing");
   }
@@ -67,7 +71,6 @@ async function instantiateModel(id) {
     if (done) break;
     chunks.push(value);
     loadedBytes += value.length;
-    const progress = Math.round((loadedBytes / totalBytes) * 100);
 
     // Send progress update to the main thread
     self.postMessage({
@@ -88,15 +91,16 @@ async function instantiateModel(id) {
 
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+  // ort.env.wasm.wasmPaths = "/dist/";
+  console.log("ORT WASM Paths", ort.env.wasm.wasmPaths);
   let options = { executionProviders: ["cpu"] };
 
   if (location.hostname === "localhost") {
     ort.env.debug = true;
-    // ort.env.logLevel = "verbose";
-    // ort.env.trace = true;
-    // options["logSeverityLevel"] = 0;
-    // options["logVerbosityLevel"] = 0;
+    ort.env.logLevel = "verbose";
+    ort.env.trace = true;
+    options["logSeverityLevel"] = 0;
+    options["logVerbosityLevel"] = 0;
   }
 
   // Create the InferenceSession with the model ArrayBuffer
@@ -149,12 +153,16 @@ function inflateGenes(
 
 async function predict(event) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
-  const { FS } = await h5wasm.ready;
+  const Module = await h5wasm.ready;
+  const { FS } = Module;
   console.log("h5wasm loaded");
 
   try {
     if (!self.model || self.model.id !== event.data.modelID) {
-      self.model = await instantiateModel(event.data.modelID);
+      self.model = await instantiateModel(
+        event.data.modelsURL,
+        event.data.modelID
+      );
     }
 
     // Reset attention accumulator
@@ -221,7 +229,7 @@ async function predict(event) {
       [1, model.genes.length]
     );
 
-    const predictions = [];
+    const labels = [];
     const encodings = [];
     const inflationIndices = precomputeInflationIndices(
       self.model.genes,
@@ -242,7 +250,7 @@ async function predict(event) {
 
       let output = await self.model.session.run({ input: inputTensor });
 
-      predictions.push([output.topk_indices.cpuData, output.probs.cpuData]);
+      labels.push([output.topk_indices.cpuData, output.probs.cpuData]);
 
       encodings.push(output.encoding.cpuData);
 
@@ -287,19 +295,18 @@ async function predict(event) {
 
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
-    // Post final result
     self.postMessage({
-      type: "result",
+      type: "predictions",
       cellNames,
       classes: self.model.classes,
-      predictions,
+      labels,
       coordinates,
       elapsedTime,
-      totalToProcess: cellNames.length,
+      totalProcessed: cellNames.length,
       totalNumCells,
     });
   } catch (error) {
-    FS.unmount("/work");
+    // FS.unmount("/work");
     self.postMessage({ type: "error", error: error });
   }
 }
