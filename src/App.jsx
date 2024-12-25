@@ -43,6 +43,13 @@ function App() {
   const scatterPlotRef = useRef(null);
   const resultsRef = useRef(null);
 
+  const sitePath =
+    window.location.origin +
+    window.location.pathname.slice(
+      0,
+      window.location.pathname.lastIndexOf("/")
+    );
+
   // On mount, load models list
   useEffect(() => {
     fetchModels();
@@ -51,22 +58,12 @@ function App() {
 
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
-    // const sitePath =
-    //   window.location.origin +
-    //   window.location.pathname.slice(
-    //     0,
-    //     window.location.pathname.lastIndexOf("/")
-    //   );
-    // const fileUrl = `${sitePath}/sample.h5ad`;
-    const fileUrl = "sample.h5ad";
-    const fileName = "sample.h5ad";
-
     try {
-      const response = await fetch(fileUrl);
+      const response = await fetch("sample.h5ad");
       const blob = await response.blob();
-      const file = new File([blob], fileName, { type: blob.type });
+      const file = new File([blob], "sample.h5ad", { type: blob.type });
       setSelectedFile(file);
-      console.log("File:", file);
+      console.log("Sample File:", file);
     } catch (error) {
       console.error("Error:", error);
     }
@@ -155,6 +152,7 @@ function App() {
 
     newWorker.postMessage({
       type: "startPrediction",
+      modelsURL: `${sitePath}/models`,
       modelID: selectedModel,
       h5File: selectedFile,
       cellRangePercent,

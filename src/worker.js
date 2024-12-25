@@ -31,11 +31,12 @@ self.addEventListener("message", async function (event) {
  * @param {string} id - The id of the model to load
  * @returns {Promise} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(id) {
+async function instantiateModel(modelsURL, id) {
+  console.log(`Instantiating model ${id} from ${modelsURL}`);
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`${self.location.origin}/models/${id}.genes`);
+  let response = await fetch(`${modelsURL}/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
@@ -43,21 +44,18 @@ async function instantiateModel(id) {
   console.log("Model Genes", genes.slice(0, 5));
 
   // Load the model classes
-  response = await fetch(`${self.location.origin}/models/${id}.classes`);
+  response = await fetch(`${modelsURL}/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
   console.log("Model Classes", classes);
 
-  const modelUrl = `${self.location.origin}/models/${id}.onnx`;
-  response = await fetch(modelUrl);
-
+  response = await fetch(`${modelsURL}/${id}.onnx`);
   if (!response.ok) {
     throw new Error(`Error fetching onnx file: ${response.status}`);
   }
-
-  const contentLength = response.headers.get("Content-Length");
+  const contentLength = response.headers.get("content-length");
   if (!contentLength) {
     throw new Error("Content-Length header is missing");
   }
@@ -94,6 +92,7 @@ async function instantiateModel(id) {
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
   // ort.env.wasm.wasmPaths = "/dist/";
+  console.log("ORT WASM Paths", ort.env.wasm.wasmPaths);
   let options = { executionProviders: ["cpu"] };
 
   if (location.hostname === "localhost") {
@@ -160,7 +159,10 @@ async function predict(event) {
 
   try {
     if (!self.model || self.model.id !== event.data.modelID) {
-      self.model = await instantiateModel(event.data.modelID);
+      self.model = await instantiateModel(
+        event.data.modelsURL,
+        event.data.modelID
+      );
     }
 
     // Reset attention accumulator
