@@ -95,13 +95,13 @@ async function instantiateModel(modelsURL, id) {
   console.log("ORT WASM Paths", ort.env.wasm.wasmPaths);
   let options = { executionProviders: ["cpu"] };
 
-  if (location.hostname === "localhost") {
-    ort.env.debug = true;
-    ort.env.logLevel = "verbose";
-    ort.env.trace = true;
-    options["logSeverityLevel"] = 0;
-    options["logVerbosityLevel"] = 0;
-  }
+  // if (location.hostname === "localhost") {
+  //   ort.env.debug = true;
+  //   ort.env.logLevel = "verbose";
+  //   ort.env.trace = true;
+  //   options["logSeverityLevel"] = 0;
+  //   options["logVerbosityLevel"] = 0;
+  // }
 
   // Create the InferenceSession with the model ArrayBuffer
   const session = await ort.InferenceSession.create(modelArray.buffer, options);
@@ -110,7 +110,6 @@ async function instantiateModel(modelsURL, id) {
   return { id, session, genes, classes };
 }
 
-// Get indices of sample genes within model genes
 function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   let inflationIndices = [];
   for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
@@ -121,40 +120,19 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   return inflationIndices;
 }
 
-// Read from sparse or non-sparse X and inflate into the inputTensor
 function inflateGenes(
   inflationIndices,
   inputTensor,
-  cellIndex,
   sampleGenes,
-  data,
-  indices,
-  indptr
+  sampleExpression
 ) {
   // Slicing is done through libhdf5 javascript - should be very efficient and
   // only read the necessary data thereby enabling unlimited size datasets
-  let sampleExpressionSlice = null;
-  if (indices) {
-    throw new Error("Sparse X not supported yet");
-  } else {
-    if (data.shape.length === 1) {
-      sampleExpressionSlice = data.slice([
-        [cellIndex * sampleGenes.length, (cellIndex + 1) * sampleGenes.length],
-      ]);
-    } else if (data.shape.length === 2) {
-      sampleExpressionSlice = data.slice([
-        [cellIndex, cellIndex + 1],
-        [0, sampleGenes.length],
-      ]);
-    } else {
-      throw new Error("Unsupported expression matrix shape");
-    }
 
-    for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-      const sampleIndex = inflationIndices[geneIndex];
-      if (sampleIndex !== -1) {
-        inputTensor.data[sampleIndex] = sampleExpressionSlice[geneIndex];
-      }
+  for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+    const sampleIndex = inflationIndices[geneIndex];
+    if (sampleIndex !== -1) {
+      inputTensor.data[sampleIndex] = sampleExpression[geneIndex];
     }
   }
 }
@@ -218,19 +196,22 @@ async function predict(event) {
     }
 
     const totalNumCells = cellNames.length;
+
+    // Limit the number of cells to process based on % slider
     cellNames = cellNames.slice(
       0,
       (event.data.cellRangePercent * cellNames.length) / 100
     );
 
+    let isSparse = false;
     let data = null;
     let indices = null;
     let indptr = null;
     if (annData.get("X").type == "Dataset") {
-      // Non-sparse X
+      isSparse = false;
       data = annData.get("X");
     } else if (annData.get("X").type == "Group") {
-      // Sparse X
+      isSparse = true;
       data = annData.get("X/data");
       indices = annData.get("X/indices");
       indptr = annData.get("X/indptr");
@@ -254,14 +235,38 @@ async function predict(event) {
 
     // Begin processing cells
     for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
+      let sampleExpression = null;
+      if (!isSparse) {
+        if (data.shape.length === 1) {
+          sampleExpression = data.slice([
+            [
+              cellIndex * sampleGenes.length,
+              (cellIndex + 1) * sampleGenes.length,
+            ],
+          ]);
+        } else if (data.shape.length === 2) {
+          sampleExpression = data.slice([
+            [cellIndex, cellIndex + 1],
+            [0, sampleGenes.length],
+          ]);
+        } else {
+          throw new Error("Unsupported data shape");
+        }
+      } else {
+        const [start, end] = indptr.slice(cellIndex, cellIndex + 2);
+        const values = data.slice([[start, end]]);
+        const value_indices = indices.slice([[start, end]]);
+        sampleExpression = new Float32Array(sampleGenes.length);
+        for (let i = 0; i < value_indices.length; i++) {
+          sampleExpression[value_indices[i]] = values[i];
+        }
+      }
+
       inflateGenes(
         inflationIndices,
         inputTensor,
-        cellIndex,
         sampleGenes,
-        data,
-        indices,
-        indptr
+        sampleExpression
       );
 
       let output = await self.model.session.run({ input: inputTensor });
@@ -322,7 +327,7 @@ async function predict(event) {
       totalNumCells,
     });
   } catch (error) {
-    FS.unmount("/work");
+    // FS.unmount("/work");
     self.postMessage({ type: "error", error: error });
   }
 }

@@ -87,7 +87,7 @@ function App() {
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
     try {
-      const response = await fetch("sample.h5ad");
+      const response = await fetch("sample-sparse.h5ad");
       const blob = await response.blob();
       const file = new File([blob], "sample.h5ad", { type: blob.type });
       setSelectedFile(file);
@@ -157,7 +157,7 @@ function App() {
         case "predictions":
           setPredictions(data);
           setStatusMessage(
-            `Processed ${data.totalToProcess} of ${
+            `Processed ${data.totalProcessed} of ${
               data.totalNumCells
             } cells in ${data.elapsedTime?.toFixed(2)} minutes`
           );
