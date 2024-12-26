@@ -253,7 +253,7 @@ async function predict(event) {
           throw new Error("Unsupported data shape");
         }
       } else {
-        const [start, end] = indptr.slice(cellIndex, cellIndex + 2);
+        const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
         const values = data.slice([[start, end]]);
         const value_indices = indices.slice([[start, end]]);
         sampleExpression = new Float32Array(sampleGenes.length);
@@ -271,7 +271,11 @@ async function predict(event) {
 
       let output = await self.model.session.run({ input: inputTensor });
 
-      labels.push([output.topk_indices.cpuData, output.probs.cpuData]);
+      labels.push([
+        Array.from(output.topk_indices.cpuData).map(Number),
+        // output.topk_indices.cpuData,
+        output.probs.cpuData,
+      ]);
 
       encodings.push(output.encoding.cpuData);
 
@@ -283,11 +287,14 @@ async function predict(event) {
       const countFinished = cellIndex + 1;
       self.postMessage({
         type: "progress",
-        message: "Predicting...",
+        message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
         countFinished,
         totalToProcess: cellNames.length,
       });
     }
+
+    annData.close();
+    FS.unmount("/work");
 
     const umap = new UMAP.UMAP({
       nComponents: 2,
@@ -296,23 +303,25 @@ async function predict(event) {
     });
 
     let coordinates = null;
+
+    const subsetUMAP = encodings.length > 1000;
     try {
-      coordinates = await umap.fitAsync(encodings, (epochNumber) => {
-        // check progress and give user feedback, or return `false` to stop
-        self.postMessage({
-          type: "progress",
-          message: "Computing coordinates...",
-          countFinished: epochNumber,
-          totalToProcess: umap.getNEpochs(),
-        });
-      });
+      coordinates = await umap.fitAsync(
+        subsetUMAP ? encodings.slice(0, 1000) : encodings,
+        (epochNumber) => {
+          // check progress and give user feedback, or return `false` to stop
+          self.postMessage({
+            type: "progress",
+            message: "Computing the first 1000 coordinates...",
+            countFinished: epochNumber,
+            totalToProcess: umap.getNEpochs(),
+          });
+        }
+      );
     } catch (error) {
       self.postMessage({ type: "error", error });
       throw error;
     }
-
-    annData.close();
-    FS.unmount("/work");
 
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes

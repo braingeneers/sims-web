@@ -46,18 +46,26 @@ function App() {
       return;
     }
     let csvContent =
-      "cell_id,p0_class,p0_prob,p1_class,p1_prob,p2_class,p2_prob,umap_0,umap_1\n";
+      "cell_id,pred_0,pred_1,pred_2,prob_0,prob_1,prob_2,umap_0,umap_1\n";
 
     predictions.cellNames.forEach((cellName, cellIndex) => {
       let cellResults = "";
       for (let i = 0; i < 3; i++) {
         cellResults += `,${
           predictions.classes[predictions.labels[cellIndex][0][i]]
-        },${predictions.labels[cellIndex][1][i].toFixed(4)}`;
+        }`;
       }
-      cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
-        4
-      )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
+      for (let i = 0; i < 3; i++) {
+        cellResults += `,${predictions.labels[cellIndex][1][i].toFixed(4)}`;
+      }
+      if (cellIndex < predictions.coordinates.length) {
+        cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
+          4
+        )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
+      } else {
+        // If there are no UMAP coordinates, just add a comma
+        cellResults += ",,";
+      }
       csvContent += `${cellName}${cellResults}\n`;
     });
 
@@ -87,9 +95,11 @@ function App() {
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
     try {
-      const response = await fetch("sample-sparse.h5ad");
+      // const sampleFileName = "sample.h5ad";
+      const sampleFileName = "sample-sparse.h5ad";
+      const response = await fetch(sampleFileName);
       const blob = await response.blob();
-      const file = new File([blob], "sample.h5ad", { type: blob.type });
+      const file = new File([blob], sampleFileName, { type: blob.type });
       setSelectedFile(file);
       console.log("Sample File:", file);
     } catch (error) {

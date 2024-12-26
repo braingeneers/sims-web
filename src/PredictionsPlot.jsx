@@ -58,9 +58,10 @@ PredictionsPlot.propTypes = {
   width: PropTypes.number,
   height: PropTypes.number,
   predictions: PropTypes.shape({
-    labels: PropTypes.arrayOf(
-      PropTypes.arrayOf([PropTypes.string, PropTypes.float])
-    ),
+    labels: PropTypes.arrayOf([
+      PropTypes.arrayOf(PropTypes.number),
+      PropTypes.arrayOf(PropTypes.float),
+    ]),
     coordinates: PropTypes.arrayOf(
       PropTypes.arrayOf([PropTypes.float, PropTypes.float])
     ),
