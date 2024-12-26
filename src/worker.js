@@ -303,16 +303,17 @@ async function predict(event) {
     });
 
     let coordinates = null;
+    const maxCoords = 2000;
 
-    const subsetUMAP = encodings.length > 1000;
+    const subsetUMAP = encodings.length > maxCoords;
     try {
       coordinates = await umap.fitAsync(
-        subsetUMAP ? encodings.slice(0, 1000) : encodings,
+        subsetUMAP ? encodings.slice(0, maxCoords) : encodings,
         (epochNumber) => {
           // check progress and give user feedback, or return `false` to stop
           self.postMessage({
             type: "progress",
-            message: "Computing the first 1000 coordinates...",
+            message: `Computing the first ${encodings.length} coordinates...`,
             countFinished: epochNumber,
             totalToProcess: umap.getNEpochs(),
           });
