@@ -168,7 +168,7 @@ function App() {
           updateTopGenes(data.attentionAccumulator, data.genes);
           break;
         case "error":
-          setStatusMessage("Error: " + data.error);
+          setStatusMessage(data.error.toString());
           setIsPredicting(false);
           break;
         default:
