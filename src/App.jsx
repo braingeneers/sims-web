@@ -95,8 +95,8 @@ function App() {
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
     try {
-      // const sampleFileName = "sample.h5ad";
-      const sampleFileName = "sample-sparse.h5ad";
+      const sampleFileName = "sample.h5ad";
+      // const sampleFileName = "sample-sparse.h5ad";
       const response = await fetch(sampleFileName);
       const blob = await response.blob();
       const file = new File([blob], sampleFileName, { type: blob.type });
