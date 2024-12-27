@@ -12,6 +12,10 @@ import * as ort from "onnxruntime-web";
 self.model = null;
 self.attentionAccumulator = null;
 
+// Limit how many UMAP points we calculate and as a result how many
+// encoding vectors we keep around
+self.maxCoords = 2000;
+
 self.addEventListener("message", async function (event) {
   const { type } = event.data;
 
@@ -93,7 +97,21 @@ async function instantiateModel(modelsURL, id) {
   // Initialize ONNX Runtime environment
   // ort.env.wasm.wasmPaths = "/dist/";
   console.log("ORT WASM Paths", ort.env.wasm.wasmPaths);
-  let options = { executionProviders: ["cpu"] };
+  let options = {
+    executionProviders: ["cpu"],
+    // executionProviders: ["wasm"],
+    // executionProviders: force_onnx_cpu ? ["wasm"] : ["webgl", "wasm"],
+    graphOptimizationLevel: "all",
+    executionMode: "sequential",
+    enableCpuMemArena: true,
+    enableMemPattern: true,
+    extra: {
+      session: {
+        intra_op_num_threads: 4,
+        inter_op_num_threads: 4,
+      },
+    },
+  };
 
   // if (location.hostname === "localhost") {
   //   ort.env.debug = true;
@@ -277,7 +295,9 @@ async function predict(event) {
         output.probs.cpuData,
       ]);
 
-      encodings.push(output.encoding.cpuData);
+      if (cellIndex < self.maxCoords) {
+        encodings.push(output.encoding.cpuData);
+      }
 
       for (let i = 0; i < self.attentionAccumulator.length; i++) {
         self.attentionAccumulator[i] += output.attention.cpuData[i];
@@ -296,6 +316,10 @@ async function predict(event) {
     annData.close();
     FS.unmount("/work");
 
+    // Record end time and calculate elapsed time of prediction only
+    const endTime = Date.now(); // Record end time
+    const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
+
     const umap = new UMAP.UMAP({
       nComponents: 2,
       nEpochs: 400,
@@ -303,12 +327,11 @@ async function predict(event) {
     });
 
     let coordinates = null;
-    const maxCoords = 2000;
 
-    const subsetUMAP = encodings.length > maxCoords;
+    const subsetUMAP = encodings.length > self.maxCoords;
     try {
       coordinates = await umap.fitAsync(
-        subsetUMAP ? encodings.slice(0, maxCoords) : encodings,
+        subsetUMAP ? encodings.slice(0, self.maxCoords) : encodings,
         (epochNumber) => {
           // check progress and give user feedback, or return `false` to stop
           self.postMessage({
@@ -324,8 +347,6 @@ async function predict(event) {
       throw error;
     }
 
-    const endTime = Date.now(); // Record end time
-    const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
     self.postMessage({
       type: "predictions",
       cellNames,
