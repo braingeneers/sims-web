@@ -3,7 +3,6 @@ import {
   Container,
   Typography,
   Button,
-  IconButton,
   Select,
   MenuItem,
   InputLabel,
@@ -20,7 +19,6 @@ import {
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
 import GitHubIcon from "@mui/icons-material/GitHub";
-import DownloadIcon from "@mui/icons-material/Download";
 
 import { PredictionsTable } from "./PredictionsTable";
 import { PredictionsPlot } from "./PredictionsPlot";
@@ -40,44 +38,6 @@ function App() {
   const [workerInstance, setWorkerInstance] = useState(null);
 
   const resultsRef = useRef(null);
-
-  function downloadCSV(predictions) {
-    if (!predictions) {
-      return;
-    }
-    let csvContent =
-      "cell_id,pred_0,pred_1,pred_2,prob_0,prob_1,prob_2,umap_0,umap_1\n";
-
-    predictions.cellNames.forEach((cellName, cellIndex) => {
-      let cellResults = "";
-      for (let i = 0; i < 3; i++) {
-        cellResults += `,${
-          predictions.classes[predictions.labels[cellIndex][0][i]]
-        }`;
-      }
-      for (let i = 0; i < 3; i++) {
-        cellResults += `,${predictions.labels[cellIndex][1][i].toFixed(4)}`;
-      }
-      if (cellIndex < predictions.coordinates.length) {
-        cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
-          4
-        )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
-      } else {
-        // If there are no UMAP coordinates, just add a comma
-        cellResults += ",,";
-      }
-      csvContent += `${cellName}${cellResults}\n`;
-    });
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const downloadLink = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    downloadLink.setAttribute("href", url);
-    downloadLink.setAttribute("download", "predictions.csv");
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-  }
 
   const sitePath =
     window.location.origin +
@@ -293,14 +253,6 @@ function App() {
           >
             Stop
           </Button>
-          <IconButton
-            onClick={() => downloadCSV(predictions)}
-            disabled={predictions === null}
-            color="primary"
-            style={{ float: "right" }}
-          >
-            <DownloadIcon />
-          </IconButton>
         </Box>
       </Box>
 
