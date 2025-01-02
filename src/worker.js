@@ -1,9 +1,10 @@
 import h5wasm from "h5wasm";
 import * as UMAP from "umap-js";
 
+import * as ort from "onnxruntime-web";
+
 // Includes WebAssembly backend only
 // import * as ort from "onnxruntime-web/wasm";
-import * as ort from "onnxruntime-web";
 
 // Includes WebAssembly single-threaded only, with training support
 // import * as ort from "onnxruntime-web/training";
@@ -12,16 +13,21 @@ import * as ort from "onnxruntime-web";
 self.model = null;
 self.attentionAccumulator = null;
 
-// Limit how many UMAP points we calculate and as a result how many
+const numThreads = navigator.hardwareConcurrency;
+const batchSize = navigator.hardwareConcurrency;
+
+// const numThreads = 2;
+// const batchSize = 2;
+
+// Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
 self.maxCoords = 2000;
 
+// Handle messages from the main thread
 self.addEventListener("message", async function (event) {
-  const { type } = event.data;
-
-  if (type === "startPrediction") {
+  if (event.data.type === "startPrediction") {
     predict(event);
-  } else if (type === "getAttentionAccumulator") {
+  } else if (event.data.type === "getAttentionAccumulator") {
     self.postMessage({
       type: "attentionAccumulator",
       attentionAccumulator: self.attentionAccumulator,
@@ -35,12 +41,12 @@ self.addEventListener("message", async function (event) {
  * @param {string} id - The id of the model to load
  * @returns {Promise} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(modelsURL, id) {
-  console.log(`Instantiating model ${id} from ${modelsURL}`);
+async function instantiateModel(modelURL, id) {
+  console.log(`Instantiating model ${id} from ${modelURL}`);
   self.postMessage({ type: "status", message: "Downloading model..." });
 
   // Load the model gene list
-  let response = await fetch(`${modelsURL}/${id}.genes`);
+  let response = await fetch(`${modelURL}/${id}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
@@ -48,14 +54,14 @@ async function instantiateModel(modelsURL, id) {
   console.log("Model Genes", genes.slice(0, 5));
 
   // Load the model classes
-  response = await fetch(`${modelsURL}/${id}.classes`);
+  response = await fetch(`${modelURL}/${id}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
   console.log("Model Classes", classes);
 
-  response = await fetch(`${modelsURL}/${id}.onnx`);
+  response = await fetch(`${modelURL}/${id}.onnx`);
   if (!response.ok) {
     throw new Error(`Error fetching onnx file: ${response.status}`);
   }
@@ -96,23 +102,32 @@ async function instantiateModel(modelsURL, id) {
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
   // ort.env.wasm.wasmPaths = "/dist/";
-  console.log("ORT WASM Paths", ort.env.wasm.wasmPaths);
+  ort.env.wasm.numThreads = numThreads;
   let options = {
-    executionProviders: ["cpu"],
-    // executionProviders: ["wasm"],
-    // executionProviders: force_onnx_cpu ? ["wasm"] : ["webgl", "wasm"],
-    graphOptimizationLevel: "all",
+    executionProviders: ["wasm"], // alias of 'cpu'
     executionMode: "sequential",
-    enableCpuMemArena: true,
-    enableMemPattern: true,
-    extra: {
-      session: {
-        intra_op_num_threads: 4,
-        inter_op_num_threads: 4,
-      },
-    },
+    // executionMode: "parallel",
+    // graphOptimizationLevel: "all",
+    // inter_op_num_threads: numThreads,
+    // intra_op_num_threads: numThreads,
+    // enableCpuMemArena: true,
+    // enableMemPattern: true,
+    // extra: {
+    //   optimization: {
+    //     enable_gelu_approximation: "1",
+    //   },
+    //   session: {
+    //     intra_op_num_threads: numThreads,
+    //     inter_op_num_threads: numThreads,
+    //     disable_prepacking: "1",
+    //     use_device_allocator_for_initializers: "1",
+    //     use_ort_model_bytes_directly: "1",
+    //     use_ort_model_bytes_for_initializers: "1",
+    //   },
+    // },
   };
 
+  // Debugging if localhost
   // if (location.hostname === "localhost") {
   //   ort.env.debug = true;
   //   ort.env.logLevel = "verbose";
@@ -128,6 +143,9 @@ async function instantiateModel(modelsURL, id) {
   return { id, session, genes, classes };
 }
 
+// Compute the source indices within sample gene space and destination within
+// the model gene space for each gene in the sample gene list
+// These are used to populate a sample gene expression tensor into the model
 function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   let inflationIndices = [];
   for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
@@ -136,23 +154,6 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   const missingGenesInModel = inflationIndices.filter((x) => x === -1).length;
   console.log(`Missing genes in model: ${missingGenesInModel}`);
   return inflationIndices;
-}
-
-function inflateGenes(
-  inflationIndices,
-  inputTensor,
-  sampleGenes,
-  sampleExpression
-) {
-  // Slicing is done through libhdf5 javascript - should be very efficient and
-  // only read the necessary data thereby enabling unlimited size datasets
-
-  for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-    const sampleIndex = inflationIndices[geneIndex];
-    if (sampleIndex !== -1) {
-      inputTensor.data[sampleIndex] = sampleExpression[geneIndex];
-    }
-  }
 }
 
 async function predict(event) {
@@ -164,7 +165,7 @@ async function predict(event) {
   try {
     if (!self.model || self.model.id !== event.data.modelID) {
       self.model = await instantiateModel(
-        event.data.modelsURL,
+        event.data.modelURL,
         event.data.modelID
       );
     }
@@ -235,13 +236,6 @@ async function predict(event) {
       indptr = annData.get("X/indptr");
     }
 
-    // Depends on the tensor to be zero, and that each cell inflates the same genes
-    let inputTensor = new ort.Tensor(
-      "float32",
-      new Float32Array(model.genes.length),
-      [1, model.genes.length]
-    );
-
     const labels = [];
     const encodings = [];
     const inflationIndices = precomputeInflationIndices(
@@ -251,64 +245,104 @@ async function predict(event) {
 
     const startTime = Date.now(); // Record start time
 
-    // Begin processing cells
-    for (let cellIndex = 0; cellIndex < cellNames.length; cellIndex++) {
-      let sampleExpression = null;
-      if (!isSparse) {
-        if (data.shape.length === 1) {
-          sampleExpression = data.slice([
-            [
-              cellIndex * sampleGenes.length,
-              (cellIndex + 1) * sampleGenes.length,
-            ],
-          ]);
-        } else if (data.shape.length === 2) {
-          sampleExpression = data.slice([
-            [cellIndex, cellIndex + 1],
-            [0, sampleGenes.length],
-          ]);
-        } else {
-          throw new Error("Unsupported data shape");
-        }
-      } else {
-        const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
-        const values = data.slice([[start, end]]);
-        const value_indices = indices.slice([[start, end]]);
-        sampleExpression = new Float32Array(sampleGenes.length);
-        for (let i = 0; i < value_indices.length; i++) {
-          sampleExpression[value_indices[i]] = values[i];
-        }
-      }
+    // Begin processing batches of cells
+    for (
+      let batchStart = 0;
+      batchStart < cellNames.length;
+      batchStart += batchSize
+    ) {
+      const batchEnd = Math.min(batchStart + batchSize, cellNames.length);
+      const currentBatchSize = batchEnd - batchStart;
 
-      inflateGenes(
-        inflationIndices,
-        inputTensor,
-        sampleGenes,
-        sampleExpression
+      // Create a new Float32Array for the entire batch with zero expression
+      const inflatedBatchData = new Float32Array(
+        currentBatchSize * self.model.genes.length
       );
 
-      let output = await self.model.session.run({ input: inputTensor });
+      // Fill batchData and then inflate it into inflatedBatchData for each cell in this batch
+      for (let i = 0; i < currentBatchSize; i++) {
+        const cellIndex = batchStart + i;
 
-      labels.push([
-        Array.from(output.topk_indices.cpuData).map(Number),
-        // output.topk_indices.cpuData,
-        output.probs.cpuData,
-      ]);
+        let singleCell = null;
 
-      if (cellIndex < self.maxCoords) {
-        encodings.push(output.encoding.cpuData);
+        if (isSparse) {
+          const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
+          const values = data.slice([[start, end]]);
+          const valueIndices = indices.slice([[start, end]]);
+          singleCell = new Float32Array(sampleGenes.length);
+          for (let j = 0; j < valueIndices.length; j++) {
+            singleCell[valueIndices[j]] = values[j];
+          }
+        } else {
+          if (data.shape.length === 1) {
+            singleCell = data.slice([
+              [
+                cellIndex * sampleGenes.length,
+                (cellIndex + 1) * sampleGenes.length,
+              ],
+            ]);
+          } else if (data.shape.length === 2) {
+            singleCell = data.slice([
+              [cellIndex, cellIndex + 1],
+              [0, sampleGenes.length],
+            ]);
+          } else {
+            throw new Error("Unsupported data shape");
+          }
+        }
+
+        // Inflate the batchData into its location in the inflatedBatchData
+        for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+          const sampleIndex = inflationIndices[geneIndex];
+          if (sampleIndex !== -1) {
+            inflatedBatchData[i * self.model.genes.length + sampleIndex] =
+              singleCell[geneIndex];
+          }
+        }
       }
 
-      for (let i = 0; i < self.attentionAccumulator.length; i++) {
-        self.attentionAccumulator[i] += output.attention.cpuData[i];
+      // Run inference on this inflatedBatch
+      const inputTensor = new ort.Tensor("float32", inflatedBatchData, [
+        currentBatchSize,
+        self.model.genes.length,
+      ]);
+      const output = await self.model.session.run({ input: inputTensor });
+
+      // Parse and store results for each cell in the batch
+      for (let r = 0; r < currentBatchSize; r++) {
+        const overallCellIndex = batchStart + r;
+        labels.push([
+          Array.from(output.topk_indices.data.slice(r * 3, r * 3 + 3)).map(
+            Number
+          ),
+          output.probs.data.slice(r * 3, r * 3 + 3),
+        ]);
+
+        if (overallCellIndex < self.maxCoords) {
+          // Each encoding row is shaped by your model: e.g. 16 dims
+          const encSize = output.encoding.dims[1];
+          const encSliceStart = r * encSize;
+          const encSliceEnd = encSliceStart + encSize;
+          encodings.push(
+            output.encoding.data.slice(encSliceStart, encSliceEnd)
+          );
+        }
+
+        // Accumulate attention for each gene
+        if (output.attention) {
+          const attSize = output.attention.dims[1];
+          for (let attIndex = 0; attIndex < attSize; attIndex++) {
+            self.attentionAccumulator[attIndex] +=
+              output.attention.data[r * attSize + attIndex];
+          }
+        }
       }
 
       // Post progress update
-      const countFinished = cellIndex + 1;
       self.postMessage({
         type: "progress",
         message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
-        countFinished,
+        countFinished: batchEnd,
         totalToProcess: cellNames.length,
       });
     }

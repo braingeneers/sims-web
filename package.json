@@ -12,7 +12,8 @@
     "preview-debug": "vite preview --debug",
     "serve-dist-python": "python -m http.server 3000 -d dist/",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "netron": "netron public/models/default.onnx"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -26,7 +27,8 @@
     "onnxruntime-web": "^1.20.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "umap-js": "^1.4.0"
+    "umap-js": "^1.4.0",
+    "upgrade": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -39,7 +41,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "gh-pages": "^6.2.0",
     "globals": "^15.13.0",
-    "vite": "^6.0.3",
+    "vite": "^6.0.6",
     "vite-plugin-static-copy": "^2.2.0"
   }
 }

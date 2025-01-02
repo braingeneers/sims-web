@@ -105,14 +105,14 @@ function App() {
     if (workerInstance) {
       workerInstance.terminate();
     }
-    const newWorker = new SIMSWorker();
-    setWorkerInstance(newWorker);
+    const worker = new SIMSWorker();
+    setWorkerInstance(worker);
     setIsPredicting(true);
     setStatusMessage("Starting prediction...");
     setProgress(0);
 
     // Communicate with web worker
-    newWorker.onmessage = (evt) => {
+    worker.onmessage = (evt) => {
       const data = evt.data;
       switch (data.type) {
         case "status":
@@ -131,7 +131,7 @@ function App() {
               data.totalNumCells
             } cells in ${data.elapsedTime?.toFixed(2)} minutes`
           );
-          newWorker.postMessage({ type: "getAttentionAccumulator" });
+          worker.postMessage({ type: "getAttentionAccumulator" });
           setIsPredicting(false);
           break;
         case "attentionAccumulator":
@@ -146,9 +146,9 @@ function App() {
       }
     };
 
-    newWorker.postMessage({
+    worker.postMessage({
       type: "startPrediction",
-      modelsURL: `${sitePath}/models`,
+      modelURL: `${sitePath}/models`,
       modelID: selectedModel,
       h5File: selectedFile,
       cellRangePercent,

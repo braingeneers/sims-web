@@ -8,6 +8,24 @@ export default defineConfig({
   },
   base: "./", // Relative base path so we can live anywhere
   // base: "/sims-web/", // Relative base path so we can live anywhere
+  server: {
+    cors: true,
+    headers: {
+      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Access-Control-Expose-Headers": "*",
+      "Access-Control-Allow-Headers": "*",
+    },
+  },
+  preview: {
+    cors: true,
+    headers: {
+      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Access-Control-Expose-Headers": "*",
+      "Access-Control-Allow-Headers": "*",
+    },
+  },
   plugins: [
     react(),
     viteStaticCopy({

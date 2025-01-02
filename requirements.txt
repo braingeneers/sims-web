@@ -6,6 +6,8 @@ onnx
 onnxruntime
 sclblonnx
 
+netron
+
 onnxscript
 
 ipython

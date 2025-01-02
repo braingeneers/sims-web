@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>onnx</title>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+    <h1>onnx webgpu</h1>
+</body>
+<script type="module">
+    async function main() {
+        try {
+            const numThreads = navigator.hardwareConcurrency;
+            const batch_size = navigator.hardwareConcurrency;
+
+            let options = {
+                executionProviders: ["wasm"], // alias of 'cpu'
+                graphOptimizationLevel: "all",
+                // executionMode: "sequential",
+                executionMode: "parallel",
+                inter_op_num_threads: numThreads,
+                intra_op_num_threads: numThreads,
+                enableCpuMemArena: true,
+                enableMemPattern: true,
+                extra: {
+                    optimization: {
+                        enable_gelu_approximation: "1",
+                    },
+                    session: {
+                        intra_op_num_threads: numThreads,
+                        inter_op_num_threads: numThreads,
+                        disable_prepacking: "1",
+                        use_device_allocator_for_initializers: "1",
+                        use_ort_model_bytes_directly: "1",
+                        use_ort_model_bytes_for_initializers: "1",
+                    },
+                },
+            };
+            ort.env.wasm.numThreads = numThreads;
+
+            const session = await ort.InferenceSession.create(
+                'http://localhost:5173/models/batch.onnx', options);
+            console.log('sims model loaded');
+
+            // Fake input tensor
+            const X = new ort.Tensor('float32', new Float32Array(batch_size * 33694), [batch_size, 33694]);
+            for (let i = 0; i < 10000; i++) {
+                X.data[i] = 0.5;
+            }
+
+            // const numSamples = 8192;
+            const numSamples = 2048;
+            const numBatchs = numSamples / batch_size;
+
+            console.log(`Start inference with ${numSamples} samples`);
+            const startTime = Date.now(); // Record start time
+            for (let i = 0; i < numBatchs; i++) {
+                const results = await session.run({ "input": X });
+                console.log(`Batch ${i} done`);
+            }
+            const endTime = Date.now();
+            const elapsedTime = (endTime - startTime) / 60000;
+            console.log(`${numSamples} samples in ${elapsedTime.toFixed(4)} minutes with a batch size of ${batch_size} and ${numThreads} threads`);
+        } catch (e) {
+            document.write(`failed to inference ONNX model: ${e}.`);
+        }
+    }
+    main();
+</script>
+
+</html>
