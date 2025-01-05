@@ -21,24 +21,24 @@
                 executionProviders: ["wasm"], // alias of 'cpu'
                 graphOptimizationLevel: "all",
                 // executionMode: "sequential",
-                executionMode: "parallel",
-                inter_op_num_threads: numThreads,
-                intra_op_num_threads: numThreads,
-                enableCpuMemArena: true,
-                enableMemPattern: true,
-                extra: {
-                    optimization: {
-                        enable_gelu_approximation: "1",
-                    },
-                    session: {
-                        intra_op_num_threads: numThreads,
-                        inter_op_num_threads: numThreads,
-                        disable_prepacking: "1",
-                        use_device_allocator_for_initializers: "1",
-                        use_ort_model_bytes_directly: "1",
-                        use_ort_model_bytes_for_initializers: "1",
-                    },
-                },
+                // executionMode: "parallel",
+                // inter_op_num_threads: numThreads,
+                // intra_op_num_threads: numThreads,
+                // enableCpuMemArena: true,
+                // enableMemPattern: true,
+                // extra: {
+                //     optimization: {
+                //         enable_gelu_approximation: "1",
+                //     },
+                //     session: {
+                //         intra_op_num_threads: numThreads,
+                //         inter_op_num_threads: numThreads,
+                //         disable_prepacking: "1",
+                //         use_device_allocator_for_initializers: "1",
+                //         use_ort_model_bytes_directly: "1",
+                //         use_ort_model_bytes_for_initializers: "1",
+                //     },
+                // },
             };
             ort.env.wasm.numThreads = numThreads;
 

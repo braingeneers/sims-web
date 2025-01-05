@@ -9,5 +9,6 @@ sclblonnx
 netron
 
 onnxscript
+onnxsim
 
 ipython

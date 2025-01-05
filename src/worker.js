@@ -1,4 +1,5 @@
 import h5wasm from "h5wasm";
+import Prando from "prando";
 import * as UMAP from "umap-js";
 
 import * as ort from "onnxruntime-web";
@@ -16,12 +17,9 @@ self.attentionAccumulator = null;
 const numThreads = navigator.hardwareConcurrency;
 const batchSize = navigator.hardwareConcurrency;
 
-// const numThreads = 2;
-// const batchSize = 2;
-
 // Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
-self.maxCoords = 2000;
+self.maxNumCoords = 2000;
 
 // Handle messages from the main thread
 self.addEventListener("message", async function (event) {
@@ -105,8 +103,8 @@ async function instantiateModel(modelURL, id) {
   ort.env.wasm.numThreads = numThreads;
   let options = {
     executionProviders: ["wasm"], // alias of 'cpu'
-    executionMode: "sequential",
-    // executionMode: "parallel",
+    // executionMode: "sequential",
+    executionMode: "parallel",
     // graphOptimizationLevel: "all",
     // inter_op_num_threads: numThreads,
     // intra_op_num_threads: numThreads,
@@ -254,14 +252,14 @@ async function predict(event) {
       const batchEnd = Math.min(batchStart + batchSize, cellNames.length);
       const currentBatchSize = batchEnd - batchStart;
 
-      // Create a new Float32Array for the entire batch with zero expression
+      // Create a new Float32Array initialized to all zeros for the entire batch
       const inflatedBatchData = new Float32Array(
         currentBatchSize * self.model.genes.length
       );
 
-      // Fill batchData and then inflate it into inflatedBatchData for each cell in this batch
-      for (let i = 0; i < currentBatchSize; i++) {
-        const cellIndex = batchStart + i;
+      // Fill batchData and inflate in one step
+      for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
+        const cellIndex = batchStart + batchSlot;
 
         let singleCell = null;
 
@@ -295,8 +293,9 @@ async function predict(event) {
         for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
           const sampleIndex = inflationIndices[geneIndex];
           if (sampleIndex !== -1) {
-            inflatedBatchData[i * self.model.genes.length + sampleIndex] =
-              singleCell[geneIndex];
+            inflatedBatchData[
+              batchSlot * self.model.genes.length + sampleIndex
+            ] = singleCell[geneIndex];
           }
         }
       }
@@ -309,19 +308,21 @@ async function predict(event) {
       const output = await self.model.session.run({ input: inputTensor });
 
       // Parse and store results for each cell in the batch
-      for (let r = 0; r < currentBatchSize; r++) {
-        const overallCellIndex = batchStart + r;
+      for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
+        const overallCellIndex = batchStart + batchSlot;
         labels.push([
-          Array.from(output.topk_indices.data.slice(r * 3, r * 3 + 3)).map(
-            Number
-          ),
-          output.probs.data.slice(r * 3, r * 3 + 3),
+          Array.from(
+            output.topk_indices.data.slice(batchSlot * 3, batchSlot * 3 + 3)
+          ).map(Number),
+          output.probs.data.slice(batchSlot * 3, batchSlot * 3 + 3),
         ]);
 
-        if (overallCellIndex < self.maxCoords) {
+        // Only push up to maxNumCoords so we limit the memory consumption as these
+        // are 32 float vectors per cell
+        if (overallCellIndex < self.maxNumCoords) {
           // Each encoding row is shaped by your model: e.g. 16 dims
           const encSize = output.encoding.dims[1];
-          const encSliceStart = r * encSize;
+          const encSliceStart = batchSlot * encSize;
           const encSliceEnd = encSliceStart + encSize;
           encodings.push(
             output.encoding.data.slice(encSliceStart, encSliceEnd)
@@ -333,7 +334,7 @@ async function predict(event) {
           const attSize = output.attention.dims[1];
           for (let attIndex = 0; attIndex < attSize; attIndex++) {
             self.attentionAccumulator[attIndex] +=
-              output.attention.data[r * attSize + attIndex];
+              output.attention.data[batchSlot * attSize + attIndex];
           }
         }
       }
@@ -354,28 +355,27 @@ async function predict(event) {
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
+    const prando = new Prando(42);
+    const random = () => prando.next();
+
     const umap = new UMAP.UMAP({
+      random,
       nComponents: 2,
       nEpochs: 400,
       nNeighbors: 15,
     });
 
     let coordinates = null;
-
-    const subsetUMAP = encodings.length > self.maxCoords;
     try {
-      coordinates = await umap.fitAsync(
-        subsetUMAP ? encodings.slice(0, self.maxCoords) : encodings,
-        (epochNumber) => {
-          // check progress and give user feedback, or return `false` to stop
-          self.postMessage({
-            type: "progress",
-            message: `Computing the first ${encodings.length} coordinates...`,
-            countFinished: epochNumber,
-            totalToProcess: umap.getNEpochs(),
-          });
-        }
-      );
+      coordinates = await umap.fitAsync(encodings, (epochNumber) => {
+        // check progress and give user feedback, or return `false` to stop
+        self.postMessage({
+          type: "progress",
+          message: `Computing the first ${encodings.length} coordinates...`,
+          countFinished: epochNumber,
+          totalToProcess: umap.getNEpochs(),
+        });
+      });
     } catch (error) {
       self.postMessage({ type: "error", error });
       throw error;

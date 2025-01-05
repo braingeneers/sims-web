@@ -52,6 +52,10 @@ ONNX Web Runtime does have support for GPUs, but unfortunately they don't suppor
 
 [ONNX Runtime Javascript Examples](https://github.com/microsoft/onnxruntime-inference-examples/tree/main/js)
 
+[Alternative Web ONNX Runtime in Rust](https://github.com/webonnx/wonnx)
+
+[ONNX Simplifier](https://github.com/daquexian/onnx-simplifier)
+
 [Netron ONNX Graph Display Website](https://netron.app/)
 
 [Graphical ONNX Editor](https://github.com/ZhangGe6/onnx-modifier)
@@ -64,3 +68,11 @@ ONNX Web Runtime does have support for GPUs, but unfortunately they don't suppor
 [SIMS Streamlit App](https://sc-sims-app.streamlit.app/) and [Source](https://github.com/jesusgf1/sims_app/blob/main/streamlit_app.py)
 
 [TabNet Model for attentive tabular learning](https://youtu.be/g1gMB3v5kzk?si=_7Wx-2giEPea68y8)
+
+[Semi supervised pre training with TabNet](https://www.kaggle.com/code/sisharaneranjana/semi-supervised-pre-training-with-tabnet)
+
+[Classification of Alzheimer's disease using robust TabNet neural networks on genetic data](https://www.aimspress.com/article/doi/10.3934/mbe.2023366)
+
+[Designing interpretable deep learning applications for functional genomics: a quantitative analysis ](https://academic.oup.com/bib/article/25/5/bbae449/7759907)
+
+[Assessing GPT-4 for cell type annotation in single-cell RNA-seq analysis](https://www.biorxiv.org/content/10.1101/2023.04.16.537094v2)
