@@ -11,6 +11,9 @@ import numpy as np
 import torch
 import torch.onnx
 import onnx
+from onnx import TensorProto
+from onnx.helper import make_node, make_graph, make_tensor, make_tensor_value_info
+
 import sclblonnx as so
 
 from scsims import SIMS
@@ -41,6 +44,7 @@ if __name__ == "__main__":
     )
 
     # Export model to ONNX file so we can read back and add post-processing steps
+    # Note variable batch size
     batch_size = 1
     torch.onnx.export(
         sims.model,
@@ -51,6 +55,7 @@ if __name__ == "__main__":
         output_names=["logits", "unknown"],
         export_params=True,
         opset_version=12,
+        dynamic_axes={"input": {0: "batch_size"}, "logits": {0: "batch_size"}},
     )
     print(f"Exported interium model to {model_path}/{model_id}.onnx")
 
@@ -72,7 +77,7 @@ if __name__ == "__main__":
                 list(
                     set(
                         f.split(".")[0]
-                        for f in os.listdir("models")
+                        for f in os.listdir(model_path)
                         if f != "models.txt" and f != ".DS_Store"
                     )
                 )
@@ -89,35 +94,47 @@ if __name__ == "__main__":
     core_model = onnx.load(f"{model_path}/{model_id}.onnx")
     core_graph = core_model.graph
 
-    # core_graph = so.graph_from_file(f"{model_path}/{model_id}.onnx")
-    # core_graph = so.delete_output(core_graph, "unknown")
+    # Remove the "unknown" output if it exists
+    for i, graph_output in enumerate(core_graph.output):
+        if graph_output.name == "unknown":
+            print(f"Removing output '{graph_output.name}'")
+            del core_graph.output[i]
+            break
+
+    so.graph_to_file(core_graph, f"{model_path}/{model_id}.onnx")
+
+    core_model = onnx.load(f"{model_path}/{model_id}.onnx")
+    core_graph = core_model.graph
 
     # Preprocessing Graph
     pre_graph = so.empty_graph("preprocess")
-    pre_graph = so.add_input(pre_graph, "input", "FLOAT", [1, model_input_size])
+    pre_graph = so.add_input(pre_graph, "input", "FLOAT", ["batch_size", model_input_size])
     n = so.node("LpNormalization", inputs=["input"], outputs=["lpnorm"])
     pre_graph = so.add_node(pre_graph, n)
-    pre_graph = so.add_output(pre_graph, "lpnorm", "FLOAT", [1, model_input_size])
+    pre_graph = so.add_output(pre_graph, "lpnorm", "FLOAT", ["batch_size", model_input_size])
     g = so.merge(
         pre_graph, core_graph, io_match=[("lpnorm", "input")], _sclbl_check=False
     )
 
-    # Postprocessing Graph
+    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
+
+    # Works to here!
+
+    # Create a post processing subgraph with a dynamic batch dimension
     k_value = np.array([3], dtype=np.int64)
-    k_node = onnx.helper.make_node(
+    k_node = make_node(
         "Constant",
         inputs=[],
         outputs=["K"],
-        value=onnx.helper.make_tensor(
+        value=make_tensor(
             name="const_tensor_K",
-            data_type=onnx.TensorProto.INT64,
+            data_type=TensorProto.INT64,
             dims=[1],
             vals=k_value,
         ),
         name="K",
     )
-
-    topk_node = onnx.helper.make_node(
+    topk_node = make_node(
         "TopK",
         inputs=["logits", "K"],
         outputs=["topk_values", "topk_indices"],
@@ -126,32 +143,27 @@ if __name__ == "__main__":
         largest=1,  # Optional: set to 1 for largest values; 0 for smallest
         sorted=1,  # Optional: set to 1 to return sorted values
     )
-
-    softmax_node = onnx.helper.make_node(
+    softmax_node = make_node(
         "Softmax",
         inputs=["topk_values"],
         outputs=["probs"],
         name="Softmax",
         axis=-1,  # Apply softmax along the last dimension
     )
-
     # Add the new nodes to the graph
     g.node.extend([k_node, topk_node, softmax_node])
-
     # Add outputs
     g.output.extend(
         [
-            onnx.helper.make_tensor_value_info(
-                "topk_values", onnx.TensorProto.FLOAT, [None, 3]
-            ),
-            onnx.helper.make_tensor_value_info(
-                "topk_indices", onnx.TensorProto.INT64, [None, 3]
-            ),
-            onnx.helper.make_tensor_value_info(
-                "probs", onnx.TensorProto.FLOAT, [None, 3]
-            ),
+            make_tensor_value_info("topk_values", onnx.TensorProto.FLOAT, ["batch_size", 3]),
+            make_tensor_value_info("topk_indices", onnx.TensorProto.INT64, ["batch_size", 3]),
+            make_tensor_value_info("probs", onnx.TensorProto.FLOAT, ["batch_size", 3]),
         ]
     )
+
+    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
+
+    # Works to here!
 
     # Expose the encoding
     candidate = "/network/tabnet/ReduceSum_output_0"  # 32,
