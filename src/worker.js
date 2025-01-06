@@ -14,8 +14,9 @@ import * as ort from "onnxruntime-web";
 self.model = null;
 self.attentionAccumulator = null;
 
-const numThreads = navigator.hardwareConcurrency;
-const batchSize = navigator.hardwareConcurrency;
+// Leave one thread for the main thread
+const numThreads = navigator.hardwareConcurrency - 1;
+const batchSize = navigator.hardwareConcurrency - 1;
 
 // Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
@@ -103,8 +104,8 @@ async function instantiateModel(modelURL, id) {
   ort.env.wasm.numThreads = numThreads;
   let options = {
     executionProviders: ["wasm"], // alias of 'cpu'
-    // executionMode: "sequential",
-    executionMode: "parallel",
+    executionMode: "sequential",
+    // executionMode: "parallel",
     // graphOptimizationLevel: "all",
     // inter_op_num_threads: numThreads,
     // intra_op_num_threads: numThreads,

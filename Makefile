@@ -2,7 +2,7 @@ serve:
 	python -m http.server 3000
 
 check-model:
-	python -m onnxruntime.tools.check_onnx_model_mobile_usability --log_level debug data/sims.onnx
+	python -m onnxruntime.tools.check_onnx_model_mobile_usability --log_level debug public/models/default.onnx
 
 deploy:
 	git checkout gh-pages

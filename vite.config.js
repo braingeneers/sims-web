@@ -11,19 +11,21 @@ export default defineConfig({
   server: {
     cors: true,
     headers: {
+      // Required for the onnxruntime-web to use multiple threads
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Access-Control-Expose-Headers": "*",
-      "Access-Control-Allow-Headers": "*",
+      // "Access-Control-Expose-Headers": "*",
+      // "Access-Control-Allow-Headers": "*",
     },
   },
   preview: {
     cors: true,
     headers: {
+      // Required for the onnxruntime-web to use multiple threads
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Access-Control-Expose-Headers": "*",
-      "Access-Control-Allow-Headers": "*",
+      // "Access-Control-Expose-Headers": "*",
+      // "Access-Control-Allow-Headers": "*",
     },
   },
   plugins: [

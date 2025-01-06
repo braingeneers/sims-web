@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
+  Alert,
   Container,
   Typography,
   Button,
@@ -263,6 +264,12 @@ function App() {
           <LinearProgress variant="determinate" value={progress} />
           <Typography>{progress}%</Typography>
         </Box>
+      )}
+
+      {!window.crossOriginIsolated && (
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          Unable to use multiple cpu cores - notify the site owner
+        </Alert>
       )}
 
       {/* Layout for top genes + scatter plot */}
