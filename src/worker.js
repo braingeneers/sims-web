@@ -260,42 +260,48 @@ async function predict(event) {
       // Fill batchData and inflate in one step
       for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
         const cellIndex = batchStart + batchSlot;
-
-        let singleCell = null;
+        const batchOffset = batchSlot * self.model.genes.length;
 
         if (isSparse) {
+          // Sparse data stored column major
           const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
           const values = data.slice([[start, end]]);
           const valueIndices = indices.slice([[start, end]]);
-          singleCell = new Float32Array(sampleGenes.length);
+
           for (let j = 0; j < valueIndices.length; j++) {
-            singleCell[valueIndices[j]] = values[j];
+            const sampleIndex = inflationIndices[valueIndices[j]];
+            if (sampleIndex !== -1) {
+              inflatedBatchData[batchOffset + sampleIndex] = values[j];
+            }
           }
         } else {
+          // Non-sparse stored column major
+          // Load up an intermediate buffer with h5wasm slice so we don't
+          // call into h5wasm for every value
+          let sampleExpression = null;
           if (data.shape.length === 1) {
-            singleCell = data.slice([
+            // Direct 1D dense array mapping
+            sampleExpression = data.slice([
               [
                 cellIndex * sampleGenes.length,
                 (cellIndex + 1) * sampleGenes.length,
               ],
             ]);
           } else if (data.shape.length === 2) {
-            singleCell = data.slice([
+            // Direct 2D matrix mapping
+            sampleExpression = data.slice([
               [cellIndex, cellIndex + 1],
               [0, sampleGenes.length],
             ]);
           } else {
             throw new Error("Unsupported data shape");
           }
-        }
-
-        // Inflate the batchData into its location in the inflatedBatchData
-        for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-          const sampleIndex = inflationIndices[geneIndex];
-          if (sampleIndex !== -1) {
-            inflatedBatchData[
-              batchSlot * self.model.genes.length + sampleIndex
-            ] = singleCell[geneIndex];
+          for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+            const sampleIndex = inflationIndices[geneIndex];
+            if (sampleIndex !== -1) {
+              inflatedBatchData[batchOffset + sampleIndex] =
+                sampleExpression[geneIndex];
+            }
           }
         }
       }
