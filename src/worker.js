@@ -155,6 +155,67 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   return inflationIndices;
 }
 
+function fillBatchData(
+  batchStart,
+  currentBatchSize,
+  data,
+  indices,
+  indptr,
+  isSparse,
+  sampleGenes,
+  inflationIndices,
+  inflatedBatchData
+) {
+  // Fill batchData and inflate in one step
+  for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
+    const cellIndex = batchStart + batchSlot;
+    const batchOffset = batchSlot * self.model.genes.length;
+
+    if (isSparse) {
+      // Sparse data stored column major
+      const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
+      const values = data.slice([[start, end]]);
+      const valueIndices = indices.slice([[start, end]]);
+
+      for (let j = 0; j < valueIndices.length; j++) {
+        const sampleIndex = inflationIndices[valueIndices[j]];
+        if (sampleIndex !== -1) {
+          inflatedBatchData[batchOffset + sampleIndex] = values[j];
+        }
+      }
+    } else {
+      // Non-sparse stored column major
+      // Load up an intermediate buffer with h5wasm slice so we don't
+      // call into h5wasm for every value
+      let sampleExpression = null;
+      if (data.shape.length === 1) {
+        // Direct 1D dense array mapping
+        sampleExpression = data.slice([
+          [
+            cellIndex * sampleGenes.length,
+            (cellIndex + 1) * sampleGenes.length,
+          ],
+        ]);
+      } else if (data.shape.length === 2) {
+        // Direct 2D matrix mapping
+        sampleExpression = data.slice([
+          [cellIndex, cellIndex + 1],
+          [0, sampleGenes.length],
+        ]);
+      } else {
+        throw new Error("Unsupported data shape");
+      }
+      for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
+        const sampleIndex = inflationIndices[geneIndex];
+        if (sampleIndex !== -1) {
+          inflatedBatchData[batchOffset + sampleIndex] =
+            sampleExpression[geneIndex];
+        }
+      }
+    }
+  }
+}
+
 async function predict(event) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;
@@ -244,78 +305,90 @@ async function predict(event) {
 
     const startTime = Date.now(); // Record start time
 
+    // Initialize double buffers of batches
+    const buffers = [
+      {
+        size: 0,
+        data: new Float32Array(
+          Math.min(batchSize, cellNames.length) * self.model.genes.length
+        ),
+      },
+      {
+        size: 0,
+        data: new Float32Array(
+          Math.min(batchSize, cellNames.length) * self.model.genes.length
+        ),
+      },
+    ];
+    let activeBuffer = 0;
+
+    // Fill the first buffer
+    buffers[activeBuffer].size = Math.min(batchSize, cellNames.length);
+    fillBatchData(
+      0,
+      buffers[activeBuffer].size,
+      data,
+      indices,
+      indptr,
+      isSparse,
+      sampleGenes,
+      inflationIndices,
+      buffers[activeBuffer].data
+    );
+
     // Begin processing batches of cells
     for (
       let batchStart = 0;
       batchStart < cellNames.length;
       batchStart += batchSize
     ) {
-      const batchEnd = Math.min(batchStart + batchSize, cellNames.length);
-      const currentBatchSize = batchEnd - batchStart;
-
-      // Create a new Float32Array initialized to all zeros for the entire batch
-      const inflatedBatchData = new Float32Array(
-        currentBatchSize * self.model.genes.length
+      // Start inference on active buffer
+      const inputTensor = new ort.Tensor(
+        "float32",
+        buffers[activeBuffer].data,
+        [buffers[activeBuffer].size, self.model.genes.length]
       );
+      const inferencePromise = self.model.session.run({ input: inputTensor });
 
-      // Fill batchData and inflate in one step
-      for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
-        const cellIndex = batchStart + batchSlot;
-        const batchOffset = batchSlot * self.model.genes.length;
-
-        if (isSparse) {
-          // Sparse data stored column major
-          const [start, end] = indptr.slice([[cellIndex, cellIndex + 2]]);
-          const values = data.slice([[start, end]]);
-          const valueIndices = indices.slice([[start, end]]);
-
-          for (let j = 0; j < valueIndices.length; j++) {
-            const sampleIndex = inflationIndices[valueIndices[j]];
-            if (sampleIndex !== -1) {
-              inflatedBatchData[batchOffset + sampleIndex] = values[j];
-            }
-          }
-        } else {
-          // Non-sparse stored column major
-          // Load up an intermediate buffer with h5wasm slice so we don't
-          // call into h5wasm for every value
-          let sampleExpression = null;
-          if (data.shape.length === 1) {
-            // Direct 1D dense array mapping
-            sampleExpression = data.slice([
-              [
-                cellIndex * sampleGenes.length,
-                (cellIndex + 1) * sampleGenes.length,
-              ],
-            ]);
-          } else if (data.shape.length === 2) {
-            // Direct 2D matrix mapping
-            sampleExpression = data.slice([
-              [cellIndex, cellIndex + 1],
-              [0, sampleGenes.length],
-            ]);
-          } else {
-            throw new Error("Unsupported data shape");
-          }
-          for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-            const sampleIndex = inflationIndices[geneIndex];
-            if (sampleIndex !== -1) {
-              inflatedBatchData[batchOffset + sampleIndex] =
-                sampleExpression[geneIndex];
-            }
-          }
+      // Fill next buffer while inference runs
+      const nextBuffer = (activeBuffer + 1) % 2;
+      const nextStart = batchStart + batchSize;
+      if (nextStart < cellNames.length) {
+        const nextEnd = Math.min(nextStart + batchSize, cellNames.length);
+        const nextSize = nextEnd - nextStart;
+        buffers[nextBuffer].size = Math.min(
+          nextSize,
+          cellNames.length - nextStart
+        );
+        if (nextSize < Math.min(batchSize, cellNames.length)) {
+          // On the last batch and its less then full size so we need to
+          // resize the Float32Array for the ort.Tensor creator
+          buffers[nextBuffer].data = new Float32Array(
+            nextSize * self.model.genes.length
+          );
         }
+        fillBatchData(
+          nextStart,
+          buffers[nextBuffer].size,
+          data,
+          indices,
+          indptr,
+          isSparse,
+          sampleGenes,
+          inflationIndices,
+          buffers[nextBuffer].data
+        );
       }
 
-      // Run inference on this inflatedBatch
-      const inputTensor = new ort.Tensor("float32", inflatedBatchData, [
-        currentBatchSize,
-        self.model.genes.length,
-      ]);
-      const output = await self.model.session.run({ input: inputTensor });
+      // Wait for inference to complete on the current buffer
+      const output = await inferencePromise;
 
       // Parse and store results for each cell in the batch
-      for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
+      for (
+        let batchSlot = 0;
+        batchSlot < buffers[activeBuffer].size;
+        batchSlot++
+      ) {
         const overallCellIndex = batchStart + batchSlot;
         labels.push([
           Array.from(
@@ -350,9 +423,12 @@ async function predict(event) {
       self.postMessage({
         type: "progress",
         message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
-        countFinished: batchEnd,
+        countFinished: nextStart,
         totalToProcess: cellNames.length,
       });
+
+      // Swap buffers
+      activeBuffer = nextBuffer;
     }
 
     annData.close();
