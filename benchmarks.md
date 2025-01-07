@@ -1,4 +1,8 @@
-# Inference only on the same expression vector on first 1% of rnh027_log1p_only.h5ad on Nov 2023 MacBook M3 Pro w/18GB
+# Benchmarks
+
+These are more notes at the moment then actual benchmarks...
+
+## Inference only on the same expression vector on first 1% of rnh027_log1p_only.h5ad on Nov 2023 MacBook M3 Pro w/18GB
 
 Batch Size = 1
 
@@ -22,14 +26,14 @@ Processed 1759 of 175925 cells in 0.62 minutes
 16 Threads
 Processed 1759 of 175925 cells in 1.09 minutes
 
-# Batch worker.js
+## Batch worker.js
 
 First pass that runs and partially matches results
 Single Threaded Processed 1759 of 175925 cells in 0.88 minutes
 vs.
 11 Threads Processed 1759 of 175925 cells in 0.31 minutes
 
-# Pure inference with no h5 i/o
+## Pure inference with no h5 i/o
 
 1024 samples in 0.3834 minutes with a batch size of 1 and 1 threads
 1024 samples in 0.0780 minutes with a batch size of 8 and 8 threads

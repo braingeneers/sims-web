@@ -16,7 +16,11 @@ self.attentionAccumulator = null;
 
 // Leave one thread for the main thread
 const numThreads = navigator.hardwareConcurrency - 1;
-const batchSize = navigator.hardwareConcurrency - 1;
+// Leave one thread for onnx to proxy from
+const batchSize = numThreads - 1;
+
+console.log(`Number of threads: ${numThreads}`);
+console.log(`Batch size: ${batchSize}`);
 
 // Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
@@ -100,12 +104,14 @@ async function instantiateModel(modelURL, id) {
 
   self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
+  // See https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html
   // ort.env.wasm.wasmPaths = "/dist/";
   ort.env.wasm.numThreads = numThreads;
+  ort.env.wasm.proxy = true;
   let options = {
     executionProviders: ["wasm"], // alias of 'cpu'
-    executionMode: "sequential",
-    // executionMode: "parallel",
+    // executionMode: "sequential",
+    executionMode: "parallel",
     // graphOptimizationLevel: "all",
     // inter_op_num_threads: numThreads,
     // intra_op_num_threads: numThreads,
@@ -342,7 +348,7 @@ async function predict(event) {
       batchStart < cellNames.length;
       batchStart += batchSize
     ) {
-      // Start inference on active buffer
+      // Start inference async on the active buffer
       const inputTensor = new ort.Tensor(
         "float32",
         buffers[activeBuffer].data,
@@ -350,7 +356,7 @@ async function predict(event) {
       );
       const inferencePromise = self.model.session.run({ input: inputTensor });
 
-      // Fill next buffer while inference runs
+      // Fill next buffer while inference runs asynchronously
       const nextBuffer = (activeBuffer + 1) % 2;
       const nextStart = batchStart + batchSize;
       if (nextStart < cellNames.length) {

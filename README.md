@@ -6,28 +6,41 @@ Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](h
 
 Opens an h5ad in the browser and runs a selected SIMs model and displays predictions.
 
-You can view the default ONNX model via [netron](https://netron.app/?url=https://github.com/braingeneers/sims-web/raw/refs/heads/main/models/default.onnx)
+You can view the default ONNX model via [netron](https://netron.app/?url=https://github.com/braingeneers/sims-web/raw/refs/heads/main/public/models/default.onnx)
 
 ![Alt text](screenshot.png?raw=true "SIMS Web Screenshot")
 
+NOTE: This application has not been fully verified as concordant to the python SIMS yet.
+
+# Architecture
+
+The front end a single page React web app using Material UI and Vite with no back end - just file storage and an HTTP server is required. The python pieces all relate to converting pytorch models into ONNX and then editing the ONNX graph to move as much of predictions processing into the graph as possible (i.e. LpNorm and SoftMax of probabilities) as well as to expose internal nodes such as the encoder output for clustering and the attention masks for explainability.
+
 # Developing
 
-Export a SIMS checkpoint to an onnx file and list of genes. Note this assumes you have the SIMS repo as a peer to this one so it can load the model definition.
+Install dependencies for the python model exporting and webapp:
 
 ```
-python scripts/sims-to-onnx.py models/default.ckpt
+pip install -r requirements.txt
+npm install
 ```
 
-Check the core model for compatibility with onnx
+Export a SIMS checkpoint to an ONNX file and list of genes:
 
 ```
-python -m onnxruntime.tools.check_onnx_model_mobile_usability models/default.onnx
+python scripts/sims-to-onnx.py checkpoints/default.ckpt public/models/
 ```
 
-Serve the web app and models locally
+Check a model for compatibility with ONNX:
 
 ```
-make serve
+python -m onnxruntime.tools.check_onnx_model_mobile_usability public/models/default.onnx
+```
+
+Serve the web app and exported models locally with auto-reload courtesy of vite:
+
+```
+npm run dev
 ```
 
 # Memory Requirements
@@ -36,11 +49,13 @@ make serve
 
 # Performance
 
-Processing a test sample with 2638 cells took 67 seconds in the browser vs. 34 seconds in python on the same machine.
+ONNX supports multithreaded inference. We allocate total cores - 2 for inference. This leaves 1 thread for the main loop so the UI can remain responsible and 1 thread for ONNX to coordinate via its 'proxy' setting (see worker.js for details).
+
+Predicting 8796 cells on a MacBook M3 Pro took 1.17 minutes or ~100k cells in minutes.
 
 # Leveraging a GPU
 
-ONNX Web Runtime does have support for GPUs, but unfortunately they don't support all operators yet. Specifically TopK is not [supported](https://github.com/microsoft/onnxruntime/blob/main/js/web/docs/webgpu-operators.md)
+ONNX Web Runtime does have support for GPUs, but unfortunately they don't support all operators yet. Specifically TopK, LpNormalization and GatherElements are not [supported](https://github.com/microsoft/onnxruntime/blob/main/js/web/docs/webgpu-operators.md). See sclblonnx.check(graph) for details.
 
 # References
 
@@ -59,6 +74,7 @@ ONNX Web Runtime does have support for GPUs, but unfortunately they don't suppor
 [Netron ONNX Graph Display Website](https://netron.app/)
 
 [Graphical ONNX Editor](https://github.com/ZhangGe6/onnx-modifier)
+
 [Classify images in a web application with ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/classify-images-nextjs-github-template.html)
 
 [h5wasm](https://github.com/usnistgov/h5wasm)
@@ -70,6 +86,8 @@ ONNX Web Runtime does have support for GPUs, but unfortunately they don't suppor
 [TabNet Model for attentive tabular learning](https://youtu.be/g1gMB3v5kzk?si=_7Wx-2giEPea68y8)
 
 [Semi supervised pre training with TabNet](https://www.kaggle.com/code/sisharaneranjana/semi-supervised-pre-training-with-tabnet)
+
+[Self Supervised TabNet](https://www.kaggle.com/code/optimo/selfsupervisedtabnet)
 
 [Classification of Alzheimer's disease using robust TabNet neural networks on genetic data](https://www.aimspress.com/article/doi/10.3934/mbe.2023366)
 

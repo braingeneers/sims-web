@@ -74,11 +74,13 @@ if __name__ == "__main__":
     with open(f"{model_path}/models.txt", "w") as f:
         f.write(
             "\n".join(
-                list(
-                    set(
-                        f.split(".")[0]
-                        for f in os.listdir(model_path)
-                        if f != "models.txt" and f != ".DS_Store"
+                sorted(
+                    list(
+                        set(
+                            f.split(".")[0]
+                            for f in os.listdir(model_path)
+                            if f != "models.txt" and f != ".DS_Store"
+                        )
                     )
                 )
             )
@@ -108,10 +110,14 @@ if __name__ == "__main__":
 
     # Preprocessing Graph
     pre_graph = so.empty_graph("preprocess")
-    pre_graph = so.add_input(pre_graph, "input", "FLOAT", ["batch_size", model_input_size])
+    pre_graph = so.add_input(
+        pre_graph, "input", "FLOAT", ["batch_size", model_input_size]
+    )
     n = so.node("LpNormalization", inputs=["input"], outputs=["lpnorm"])
     pre_graph = so.add_node(pre_graph, n)
-    pre_graph = so.add_output(pre_graph, "lpnorm", "FLOAT", ["batch_size", model_input_size])
+    pre_graph = so.add_output(
+        pre_graph, "lpnorm", "FLOAT", ["batch_size", model_input_size]
+    )
     g = so.merge(
         pre_graph, core_graph, io_match=[("lpnorm", "input")], _sclbl_check=False
     )
@@ -155,8 +161,12 @@ if __name__ == "__main__":
     # Add outputs
     g.output.extend(
         [
-            make_tensor_value_info("topk_values", onnx.TensorProto.FLOAT, ["batch_size", 3]),
-            make_tensor_value_info("topk_indices", onnx.TensorProto.INT64, ["batch_size", 3]),
+            make_tensor_value_info(
+                "topk_values", onnx.TensorProto.FLOAT, ["batch_size", 3]
+            ),
+            make_tensor_value_info(
+                "topk_indices", onnx.TensorProto.INT64, ["batch_size", 3]
+            ),
             make_tensor_value_info("probs", onnx.TensorProto.FLOAT, ["batch_size", 3]),
         ]
     )
