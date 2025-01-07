@@ -2,7 +2,7 @@
 
 Run [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](https://github.com/usnistgov/h5wasm) to read local AnnData (.h5ad) files and [ONNX](https://onnxruntime.ai/) to run the model.
 
-# [Demo](https://braingeneers.github.io/sims-web)
+# [Demo](https://cells-test.gi.ucsc.edu/sims)
 
 Opens an h5ad in the browser and runs a selected SIMs model and displays predictions.
 

@@ -2,6 +2,17 @@
 
 These are more notes at the moment then actual benchmarks...
 
+## Latest version with dynamic batch size, multi-threaded ONNX and double buffering of I/O
+
+#threads/batch size
+10/9 Processed 1759 of 175925 cells in 0.26 minutes
+10/18 Processed 1759 of 175925 cells in 0.24 minutes
+10/45 Processed 1759 of 175925 cells in 0.21 minutes
+10/180 Processed 1759 of 175925 cells in 0.19 minutes
+10/450 Processed 1759 of 175925 cells in 0.18 minutes
+
+Larger I/O via h5wasm improves time, but higher memory usage
+
 ## Inference only on the same expression vector on first 1% of rnh027_log1p_only.h5ad on Nov 2023 MacBook M3 Pro w/18GB
 
 Batch Size = 1

@@ -1,5 +1,5 @@
 """
-Compare SIMS vs. ONNX input and output
+Compare SIMS vs. ONNX
 """
 
 import argparse
@@ -13,10 +13,10 @@ from scsims import SIMS
 import torch.onnx
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compare SIMS to ONNX")
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkpoint", type=str, help="Path to a SIMS checkpoint")
-    parser.add_argument("input", type=str, help="Path to h5ad to")
-    parser.add_argument("predictions", type=str, help="CSV Predictions from sims-web")
+    parser.add_argument("input", type=str, help="Path to h5ad")
+    parser.add_argument("predictions", type=str, help="sims-web csv predictions")
     args = parser.parse_args()
 
     # Instantiate a model
@@ -30,7 +30,9 @@ if __name__ == "__main__":
     adata = anndata.read(args.input)
     adata = adata[0:10].copy()
 
-    print("adata X format", )
+    print(
+        "adata X format",
+    )
 
     # Compare predictions of sims model and saved web csv
     sims_predictions = sims.predict(adata)
