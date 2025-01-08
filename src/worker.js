@@ -505,7 +505,7 @@ async function predict(event) {
 
     await storeOutputInIndexedDB(
       event.data.h5File.name,
-      coordinates,
+      coordinates.flat(),
       self.model.classes,
       labels.map((label) => label[0][0])
     );
