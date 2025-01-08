@@ -222,6 +222,39 @@ function fillBatchData(
   }
 }
 
+export async function storeOutputInIndexedDB(
+  datasetLabel,
+  coords,
+  cellTypeNames,
+  cellTypes
+) {
+  const request = indexedDB.open("sims-web", 1);
+
+  request.onupgradeneeded = (event) => {
+    const db = event.target.result;
+    if (!db.objectStoreNames.contains("datasets")) {
+      db.createObjectStore("datasets", { keyPath: "datasetLabel" });
+    }
+  };
+
+  request.onsuccess = () => {
+    const db = request.result;
+    const tx = db.transaction("datasets", "readwrite");
+    const store = tx.objectStore("datasets");
+    store.put({
+      datasetLabel,
+      coords, // Float32Array of length 2*n
+      cellTypeNames, // Array of strings
+      cellTypes, // Array of indices
+    });
+    tx.oncomplete = () => db.close();
+  };
+
+  request.onerror = () => {
+    console.error("IndexedDB error", request.error);
+  };
+}
+
 async function predict(event) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;
@@ -469,6 +502,13 @@ async function predict(event) {
       self.postMessage({ type: "error", error });
       throw error;
     }
+
+    await storeOutputInIndexedDB(
+      event.data.h5File.name,
+      coordinates,
+      self.model.classes,
+      labels.map((label) => label[0][0])
+    );
 
     self.postMessage({
       type: "predictions",
