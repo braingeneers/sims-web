@@ -19,9 +19,14 @@ import sclblonnx as so
 from scsims import SIMS
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export a SIMS model to ONNX")
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkpoint", type=str, help="Path to the checkpoint file")
     parser.add_argument("destination", type=str, help="Path to save the ONNX model")
+    # NOTE: I've tried every other values of opset (13-17) and they all fail
+    # to load correctly in the web runtime... so we're sticking with 12
+    parser.add_argument(
+        "--opset-version", type=int, default=12, help="ONNX opset version"
+    )
     args = parser.parse_args()
 
     model_id = args.checkpoint.split("/")[-1].split(".")[0]
@@ -54,7 +59,7 @@ if __name__ == "__main__":
         input_names=["input"],
         output_names=["logits", "unknown"],
         export_params=True,
-        opset_version=12,
+        opset_version=args.opset_version,
         dynamic_axes={"input": {0: "batch_size"}, "logits": {0: "batch_size"}},
     )
     print(f"Exported interium model to {model_path}/{model_id}.onnx")
@@ -93,20 +98,20 @@ if __name__ == "__main__":
     """
 
     # Load the core model back in via onnx
-    core_model = onnx.load(f"{model_path}/{model_id}.onnx")
-    core_graph = core_model.graph
-
+    model = onnx.load(f"{model_path}/{model_id}.onnx")
+    opset_version = (
+        model.opset_import[0].version if len(model.opset_import) > 0 else None
+    )
+    assert opset_version == args.opset_version
+    print("opset_version:", opset_version)
     # Remove the "unknown" output if it exists
-    for i, graph_output in enumerate(core_graph.output):
-        if graph_output.name == "unknown":
-            print(f"Removing output '{graph_output.name}'")
-            del core_graph.output[i]
+    for i, output in enumerate(model.graph.output):
+        if output.name == "unknown":
+            print(f"Removing output '{output.name}'")
+            del model.graph.output[i]
             break
-
-    so.graph_to_file(core_graph, f"{model_path}/{model_id}.onnx")
-
-    core_model = onnx.load(f"{model_path}/{model_id}.onnx")
-    core_graph = core_model.graph
+    assert so.graph_to_file(model.graph, f"{model_path}/{model_id}.onnx")
+    model = onnx.load(f"{model_path}/{model_id}.onnx")
 
     # Preprocessing Graph
     pre_graph = so.empty_graph("preprocess")
@@ -119,12 +124,12 @@ if __name__ == "__main__":
         pre_graph, "lpnorm", "FLOAT", ["batch_size", model_input_size]
     )
     g = so.merge(
-        pre_graph, core_graph, io_match=[("lpnorm", "input")], _sclbl_check=False
+        pre_graph, model.graph, io_match=[("lpnorm", "input")], _sclbl_check=False
     )
 
-    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
-
-    # Works to here!
+    # Note we can't assign g to model.graph so we save and reload
+    assert so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
+    model = onnx.load(f"{model_path}/{model_id}.onnx")
 
     # Create a post processing subgraph with a dynamic batch dimension
     k_value = np.array([3], dtype=np.int64)
@@ -157,9 +162,9 @@ if __name__ == "__main__":
         axis=-1,  # Apply softmax along the last dimension
     )
     # Add the new nodes to the graph
-    g.node.extend([k_node, topk_node, softmax_node])
+    model.graph.node.extend([k_node, topk_node, softmax_node])
     # Add outputs
-    g.output.extend(
+    model.graph.output.extend(
         [
             make_tensor_value_info(
                 "topk_values", onnx.TensorProto.FLOAT, ["batch_size", 3]
@@ -171,34 +176,32 @@ if __name__ == "__main__":
         ]
     )
 
-    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
-
-    # Works to here!
+    assert so.graph_to_file(model.graph, f"{model_path}/{model_id}.onnx")
 
     # Expose the encoding
     candidate = "/network/tabnet/ReduceSum_output_0"  # 32,
-    shape_info = onnx.shape_inference.infer_shapes(core_model)
+    shape_info = onnx.shape_inference.infer_shapes(model)
     for idx, node in enumerate(shape_info.graph.value_info):
         if node.name == candidate:
             print(idx, node)
             break
     assert node.name == candidate
-    g.output.extend([node])
-    g = so.rename_output(g, candidate, "encoding")
+    model.graph.output.extend([node])
 
-    # Define the candidate node names
+    _ = so.rename_output(model.graph, candidate, "encoding")
+
+    # Define the candidate mask/explainability outputs
     attentention_candidates = [
         "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0",
         "/network/tabnet/encoder/att_transformers.1/selector/Clip_output_0",
         "/network/tabnet/encoder/att_transformers.2/selector/Clip_output_0",
     ]
-
     # Gather the output names for the candidates
-    shape_info = onnx.shape_inference.infer_shapes(core_model)
+    shape_info = onnx.shape_inference.infer_shapes(model)
     attention_node_outputs = []
     for candidate in attentention_candidates:
         node_found = False
-        for node in core_model.graph.node:
+        for node in model.graph.node:
             for output_name in node.output:
                 if output_name == candidate:
                     print(f"Found node output: {output_name}")
@@ -209,11 +212,9 @@ if __name__ == "__main__":
                 break
         else:
             raise Exception(f"Node output {candidate} not found in graph")
-
     if len(attention_node_outputs) != 3:
         raise Exception("Could not find all attention node outputs")
 
-    # Create Add nodes to sum the outputs
     # First Add node to sum the first two outputs
     add_node1 = onnx.helper.make_node(
         "Add",
@@ -221,7 +222,6 @@ if __name__ == "__main__":
         outputs=["add_attention_1"],
         name="Add_Attention_1",
     )
-
     # Second Add node to add the third output
     add_node2 = onnx.helper.make_node(
         "Add",
@@ -229,9 +229,8 @@ if __name__ == "__main__":
         outputs=["attention"],
         name="Add_Attention_2",
     )
-
     # Add the new nodes to the graph
-    g.node.extend([add_node1, add_node2])
+    model.graph.node.extend([add_node1, add_node2])
 
     # Retrieve the data type and shape from one of the candidate outputs
     candidate_value_info = None
@@ -239,7 +238,6 @@ if __name__ == "__main__":
         if value_info.name == attention_node_outputs[0]:
             candidate_value_info = value_info
             break
-
     if candidate_value_info is None:
         raise Exception("Could not find value info for the attention nodes")
 
@@ -254,13 +252,20 @@ if __name__ == "__main__":
     )
 
     # Add 'attention' to the model outputs
-    g.output.append(attention_output)
+    model.graph.output.append(attention_output)
 
+    print("Final iputs:")
+    so.list_inputs(model.graph)
     print("Final outputs:")
-    so.list_outputs(g)
+    so.list_outputs(model.graph)
 
     # Save the final graph
     print(
-        f"Exporting graph with pre, core and post processing to {model_path}/{model_id}.onnx"
+        f"Exporting graph with pre, core and post processing using ONNX opset version {args.opset_version} to {model_path}/{model_id}.onnx"
     )
-    so.graph_to_file(g, f"{model_path}/{model_id}.onnx")
+    # onnx.save(model, f"{model_path}/{model_id}.onnx")
+    so.graph_to_file(
+        model.graph,
+        f"{model_path}/{model_id}.onnx",
+        onnx_opset_version=args.opset_version,
+    )

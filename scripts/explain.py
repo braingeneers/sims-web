@@ -1,3 +1,8 @@
+"""
+Explore the ONNX graph extracting candidates for masks and compare to those in the
+python SIMS model and explanation.
+"""
+
 import os
 import re
 import tempfile
@@ -85,10 +90,7 @@ if __name__ == "__main__":
     onnx_explain = np.sum(onnx_masks, axis=0)
 
     # Verify the saved attention as sum of the clip output nodes matches ours here
-    np.testing.assert_array_almost_equal(
-        onnx_explain, onnx_attention[0], decimal=5
-    )
-
+    np.testing.assert_array_almost_equal(onnx_explain, onnx_attention[0], decimal=5)
 
     def top_indices(arr, k):
         top_k_indices = np.argpartition(arr, -k)[-k:]
