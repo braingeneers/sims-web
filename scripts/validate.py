@@ -25,9 +25,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--count", type=int, help="Number of cells to compare (default = all)"
     )
-    parser.add_argument(
-        "--decimals", type=float, default=2, help="# decimals to compare"
-    )
+    parser.add_argument("--decimals", type=int, default=2, help="# decimals to compare")
     args = parser.parse_args()
 
     # Load count cells from the sample
@@ -58,10 +56,27 @@ if __name__ == "__main__":
     pm = onnx.load(args.onnx)
     pm_opset_version = pm.opset_import[0].version if len(pm.opset_import) > 0 else None
 
-    # Export a raw un-edited model to onnx to compare logits before
+    # Compare sims vs. production onnx model predictions
+    sp = sm.predict(adata)
+    sp_probs = sp.prob_0.values
+
+    output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
+    pm_probs = [p[0] for p in output[0]]
+
+    print(
+        "sims python vs. onnx production {} prob_0 differ by more then {} decimals out of {}".format(
+            np.count_nonzero(
+                np.round(np.abs(sp_probs - pm_probs), decimals=args.decimals)
+            ),
+            args.decimals,
+            len(pm_probs),
+        )
+    )
+
+    # Export a raw un-edited core model to onnx to compare logits before
     # graph editing adds pre and post processing
-    raw_model_path = tempfile.mktemp(suffix=".onnx")
-    batch_size = 1
+    # raw_model_path = tempfile.mktemp(suffix=".onnx")
+    raw_model_path = "data/temp.onnx"
 
     torch.onnx.export(
         sims.model,
@@ -87,21 +102,36 @@ if __name__ == "__main__":
     # Compare raw logits
     #
     sm_logits = sm(x_normalized)[0].detach().numpy()
-
     cm_logits = so.run(
         cm.graph,
         inputs={"input": x_normalized.detach().numpy()},
         outputs=["logits"],
     )[0]
-
     pm_logits = so.run(
         pm.graph,
         inputs={"input": x.detach().numpy()},
         outputs=["logits"],
     )[0]
-
     print(
-        "{} logits differ by more then {} decimals out of {}".format(
+        "cm vs. pm {} logits differ by more then {} decimals out of {}".format(
+            np.count_nonzero(
+                np.round(np.abs(cm_logits - pm_logits), decimals=args.decimals)
+            ),
+            args.decimals,
+            pm_logits.shape[0] * pm_logits.shape[1],
+        )
+    )
+    print(
+        "sm vs. cm {} logits differ by more then {} decimals out of {}".format(
+            np.count_nonzero(
+                np.round(np.abs(sm_logits - cm_logits), decimals=args.decimals)
+            ),
+            args.decimals,
+            cm_logits.shape[0] * cm_logits.shape[1],
+        )
+    )
+    print(
+        "sm vs. pm {} logits differ by more then {} decimals out of {}".format(
             np.count_nonzero(
                 np.round(np.abs(sm_logits - pm_logits), decimals=args.decimals)
             ),
@@ -112,27 +142,6 @@ if __name__ == "__main__":
 
     # assert np.allclose(sm_logits[0], cm_logits[0], rtol=0.001, atol=0.0)
     # assert np.allclose(sm_logits, cm_logits, rtol=0.1, atol=0.0, )
-
-    # Load first 10 cells from a sample
-    adata = anndata.read(args.sample)[0 : args.count]
-
-    # Compare predictions of sims python and production onnx model
-    p = sm.predict(adata)
-    sm_probs = p.prob_0.values
-    sm_preds = p.pred_0.values
-
-    output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
-    pm_probs = [p[0] for p in output[0]]
-
-    print(
-        "{} prob_0 differ by more then {} decimals out of {}".format(
-            np.count_nonzero(
-                np.round(np.abs(sm_probs - pm_probs), decimals=args.decimals)
-            ),
-            args.decimals,
-            len(pm_probs),
-        )
-    )
 
     # try:
     #     # Make sure cell id's and order match
@@ -160,3 +169,42 @@ if __name__ == "__main__":
     # except AssertionError as e:
     #     print(e)
     #     print("Predictions do not match")
+
+    # # Create a single random input
+    # _ = torch.manual_seed(42)
+    # x = torch.randn(1, len(sims.model.genes))
+
+    # # Encoder
+    # pm = sims.model.network.tabnet.encoder
+    # pm.eval()
+    # torch.onnx.export(
+    #     pm,
+    #     torch.zeros(1, len(sims.model.genes)),
+    #     raw_model_path,
+    #     training=torch.onnx.TrainingMode.EVAL,
+    #     input_names=["input"],
+    #     output_names=["y0", "y1", "y2", "y3"],
+    #     export_params=True,
+    #     opset_version=pm_opset_version,
+    # )
+
+    # om = onnx.load(raw_model_path)
+    # so.list_inputs(om.graph)
+    # so.list_outputs(om.graph)
+
+    # pm.eval()  # Set to evaluation mode
+    # with torch.no_grad():  # Disable gradient calculation
+    #     py = pm.forward(x)
+
+    # oy = so.run(
+    #     om.graph,
+    #     inputs={"input": x.detach().numpy()},
+    #     outputs=["y0", "y1", "y2", "y3"],
+    # )
+
+    # oy[0][0][0:4]
+
+    # py[1][0][0].detach().numpy()[0:4]
+
+    # py[0][1][0].detach().numpy()[0:4]
+    # py[0][2][0].detach().numpy()[0:4]

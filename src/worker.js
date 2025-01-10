@@ -256,6 +256,27 @@ export async function storeOutputInIndexedDB(
 }
 
 async function predict(event) {
+  // Delete existing dataset from IndexedDB
+  {
+    const request = indexedDB.open("sims-web", 1);
+    request.onupgradeneeded = (evt) => {
+      const db = evt.target.result;
+      if (!db.objectStoreNames.contains("datasets")) {
+        db.createObjectStore("datasets", { keyPath: "datasetLabel" });
+      }
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("datasets", "readwrite");
+      const store = tx.objectStore("datasets");
+      store.delete(event.data.h5File.name);
+      tx.oncomplete = () => db.close();
+    };
+    request.onerror = () => {
+      console.error("IndexedDB error", request.error);
+    };
+  }
+
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;
   const { FS } = Module;

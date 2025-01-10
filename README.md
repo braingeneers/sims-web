@@ -10,7 +10,7 @@ You can view the default ONNX model via [netron](https://netron.app/?url=https:/
 
 ![Alt text](screenshot.png?raw=true "SIMS Web Screenshot")
 
-NOTE: This application has not been fully verified as concordant to the python SIMS yet.
+NOTE: This application has not been fully verified as concordant to the python SIMS yet. Currently the predictions are ~90% concordant with SIMS
 
 # Architecture
 
@@ -37,10 +37,22 @@ Check a model for compatibility with ONNX:
 python -m onnxruntime.tools.check_onnx_model_mobile_usability public/models/default.onnx
 ```
 
+Compare the output of SIMS to ONNX using the python runtime:
+
+```
+python scripts/validate.py checkpoints/default.ckpt public/models/default.onnx public/sample.h5ad --decimals 2
+```
+
 Serve the web app and exported models locally with auto-reload courtesy of vite:
 
 ```
 npm run dev
+```
+
+Display the compute graph using netron:
+
+```
+netron public/models/default.onnx
 ```
 
 # Memory Requirements
