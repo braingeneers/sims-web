@@ -10,17 +10,17 @@ import * as ort from "onnxruntime-web";
 // Includes WebAssembly single-threaded only, with training support
 // import * as ort from "onnxruntime-web/training";
 
-// Global variables
+// Worker global variables
 self.model = null;
-self.attentionAccumulator = null;
+self.attentionAccumulators = null;
 
 // Leave one thread for the main thread
-const numThreads = navigator.hardwareConcurrency - 1;
+self.numThreads = navigator.hardwareConcurrency - 1;
 // Leave one thread for onnx to proxy from
-const batchSize = numThreads - 1;
+self.batchSize = self.numThreads - 1;
 
-console.log(`Number of threads: ${numThreads}`);
-console.log(`Batch size: ${batchSize}`);
+console.log(`Number of threads: ${self.numThreads}`);
+console.log(`Batch size: ${self.batchSize}`);
 
 // Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
@@ -30,12 +30,6 @@ self.maxNumCoords = 2000;
 self.addEventListener("message", async function (event) {
   if (event.data.type === "startPrediction") {
     predict(event);
-  } else if (event.data.type === "getAttentionAccumulator") {
-    self.postMessage({
-      type: "attentionAccumulator",
-      attentionAccumulator: self.attentionAccumulator,
-      genes: self.model.genes,
-    });
   }
 });
 
@@ -106,7 +100,7 @@ async function instantiateModel(modelURL, id) {
   // Initialize ONNX Runtime environment
   // See https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html
   // ort.env.wasm.wasmPaths = "/dist/";
-  ort.env.wasm.numThreads = numThreads;
+  ort.env.wasm.numThreads = self.numThreads;
   ort.env.wasm.proxy = true;
   let options = {
     executionProviders: ["wasm"], // alias of 'cpu'
@@ -223,29 +217,25 @@ function fillBatchData(
 }
 
 export async function storeOutputInIndexedDB(
+  modelID,
   datasetLabel,
   coords,
   cellTypeNames,
-  cellTypes
+  cellTypes,
+  topGeneIndicesByClass
 ) {
   const request = indexedDB.open("sims-web", 1);
-
-  request.onupgradeneeded = (event) => {
-    const db = event.target.result;
-    if (!db.objectStoreNames.contains("datasets")) {
-      db.createObjectStore("datasets", { keyPath: "datasetLabel" });
-    }
-  };
-
   request.onsuccess = () => {
     const db = request.result;
     const tx = db.transaction("datasets", "readwrite");
     const store = tx.objectStore("datasets");
     store.put({
+      modelID,
       datasetLabel,
       coords, // Float32Array of length 2*n
       cellTypeNames, // Array of strings
       cellTypes, // Array of indices
+      topGeneIndicesByClass,
     });
     tx.oncomplete = () => db.close();
   };
@@ -259,18 +249,14 @@ async function predict(event) {
   // Delete existing dataset from IndexedDB
   {
     const request = indexedDB.open("sims-web", 1);
-    request.onupgradeneeded = (evt) => {
-      const db = evt.target.result;
-      if (!db.objectStoreNames.contains("datasets")) {
-        db.createObjectStore("datasets", { keyPath: "datasetLabel" });
-      }
-    };
     request.onsuccess = () => {
       const db = request.result;
-      const tx = db.transaction("datasets", "readwrite");
-      const store = tx.objectStore("datasets");
-      store.delete(event.data.h5File.name);
-      tx.oncomplete = () => db.close();
+      if (db.objectStoreNames.contains("datasets")) {
+        const tx = db.transaction("datasets", "readwrite");
+        const store = tx.objectStore("datasets");
+        store.delete(event.data.h5File.name);
+        tx.oncomplete = () => db.close();
+      }
     };
     request.onerror = () => {
       console.error("IndexedDB error", request.error);
@@ -290,8 +276,10 @@ async function predict(event) {
       );
     }
 
-    // Reset attention accumulator
-    self.attentionAccumulator = new Float32Array(self.model.genes.length);
+    // Reset attention accumulators
+    self.attentionAccumulators = new Float32Array(
+      self.model.classes.length * self.model.genes.length
+    );
 
     self.postMessage({ type: "status", message: "Loading file" });
     if (!FS.analyzePath("/work").exists) {
@@ -370,20 +358,20 @@ async function predict(event) {
       {
         size: 0,
         data: new Float32Array(
-          Math.min(batchSize, cellNames.length) * self.model.genes.length
+          Math.min(self.batchSize, cellNames.length) * self.model.genes.length
         ),
       },
       {
         size: 0,
         data: new Float32Array(
-          Math.min(batchSize, cellNames.length) * self.model.genes.length
+          Math.min(self.batchSize, cellNames.length) * self.model.genes.length
         ),
       },
     ];
     let activeBuffer = 0;
 
     // Fill the first buffer
-    buffers[activeBuffer].size = Math.min(batchSize, cellNames.length);
+    buffers[activeBuffer].size = Math.min(self.batchSize, cellNames.length);
     fillBatchData(
       0,
       buffers[activeBuffer].size,
@@ -400,7 +388,7 @@ async function predict(event) {
     for (
       let batchStart = 0;
       batchStart < cellNames.length;
-      batchStart += batchSize
+      batchStart += self.batchSize
     ) {
       // Start inference async on the active buffer
       const inputTensor = new ort.Tensor(
@@ -412,15 +400,15 @@ async function predict(event) {
 
       // Fill next buffer while inference runs asynchronously
       const nextBuffer = (activeBuffer + 1) % 2;
-      const nextStart = batchStart + batchSize;
+      const nextStart = batchStart + self.batchSize;
       if (nextStart < cellNames.length) {
-        const nextEnd = Math.min(nextStart + batchSize, cellNames.length);
+        const nextEnd = Math.min(nextStart + self.batchSize, cellNames.length);
         const nextSize = nextEnd - nextStart;
         buffers[nextBuffer].size = Math.min(
           nextSize,
           cellNames.length - nextStart
         );
-        if (nextSize < Math.min(batchSize, cellNames.length)) {
+        if (nextSize < Math.min(self.batchSize, cellNames.length)) {
           // On the last batch and its less then full size so we need to
           // resize the Float32Array for the ort.Tensor creator
           buffers[nextBuffer].data = new Float32Array(
@@ -469,13 +457,12 @@ async function predict(event) {
           );
         }
 
-        // Accumulate attention for each gene
-        if (output.attention) {
-          const attSize = output.attention.dims[1];
-          for (let attIndex = 0; attIndex < attSize; attIndex++) {
-            self.attentionAccumulator[attIndex] +=
-              output.attention.data[batchSlot * attSize + attIndex];
-          }
+        // Add attention into the predicted class accumulator
+        for (let i = 0; i < self.model.genes.length; i++) {
+          const classIndex = labels[labels.length - 1][0][0];
+          self.attentionAccumulators[
+            classIndex * self.model.genes.length + i
+          ] += output.attention.data[batchSlot * self.model.genes.length + i];
         }
       }
 
@@ -498,6 +485,7 @@ async function predict(event) {
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
+    // Calculate coordinates of each cell by applying umap to its encodings vector
     const prando = new Prando(42);
     const random = () => prando.next();
 
@@ -524,11 +512,42 @@ async function predict(event) {
       throw error;
     }
 
+    // Calculate top K gene indices per class and overall as well as
+    // the overall top k gene indices for all predictions
+    const K = 10;
+    let topGeneIndicesByClass = [];
+
+    function topKIndices(x, k) {
+      const indices = Array.from(x.keys());
+      indices.sort((a, b) => x[b] - x[a]);
+      return indices.slice(0, k);
+    }
+
+    let overallAccumulator = new Float32Array(self.model.genes.length);
+    for (let i = 0; i < self.model.classes.length; i++) {
+      topGeneIndicesByClass.push(
+        topKIndices(
+          self.attentionAccumulators.slice(
+            i * self.model.genes.length,
+            (i + 1) * self.model.genes.length
+          ),
+          K
+        )
+      );
+      for (let j = 0; j < self.model.genes.length; j++) {
+        overallAccumulator[j] +=
+          self.attentionAccumulators[i * self.model.genes.length + j];
+      }
+    }
+    let overallTopGenes = topKIndices(overallAccumulator, K);
+
     await storeOutputInIndexedDB(
+      self.model.id,
       event.data.h5File.name,
       coordinates.flat(),
       self.model.classes,
-      labels.map((label) => label[0][0])
+      labels.map((label) => label[0][0]),
+      topGeneIndicesByClass
     );
 
     self.postMessage({
@@ -540,6 +559,8 @@ async function predict(event) {
       elapsedTime,
       totalProcessed: cellNames.length,
       totalNumCells,
+      overallTopGenes,
+      genes: self.model.genes,
     });
   } catch (error) {
     // FS.unmount("/work");

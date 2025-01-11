@@ -15,10 +15,13 @@ import {
   List,
   ListItem,
   ListItemText,
+  IconButton,
 } from "@mui/material";
 
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
+import DeleteIcon from "@mui/icons-material/Delete";
+
 import GitHubIcon from "@mui/icons-material/GitHub";
 
 import { PredictionsTable } from "./PredictionsTable";
@@ -37,6 +40,7 @@ function App() {
   const [topGenes, setTopGenes] = useState([]);
   const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
+  const [dbDatasets, setDbDatasets] = useState([]);
 
   const resultsRef = useRef(null);
 
@@ -51,7 +55,49 @@ function App() {
   useEffect(() => {
     fetchModels();
     fetchSampleFile();
+    loadDatasets();
   }, []);
+
+  // Load datasets from IndexedDB
+  async function loadDatasets() {
+    const request = indexedDB.open("sims-web", 1);
+    request.onupgradeneeded = (event) => {
+      console.log("Creating results database");
+      const db = event.target.result;
+      db.createObjectStore("datasets", { keyPath: "datasetLabel" });
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      if (db.objectStoreNames.contains("datasets")) {
+        const tx = db.transaction("datasets", "readonly");
+        const store = tx.objectStore("datasets");
+        const getAllRequest = store.getAll();
+        getAllRequest.onsuccess = () => {
+          const result = getAllRequest.result || [];
+          setDbDatasets(result);
+          db.close();
+        };
+      } else {
+        console.log("No existing results found");
+      }
+    };
+  }
+
+  // Delete a dataset
+  function handleDeleteDataset(label) {
+    console.log("Deleting results", label);
+    const request = indexedDB.open("sims-web", 1);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("datasets", "readwrite");
+      const store = tx.objectStore("datasets");
+      store.delete(label);
+      tx.oncomplete = () => {
+        db.close();
+        loadDatasets();
+      };
+    };
+  }
 
   // Fill in a sample file so a user can just hit predict to try out
   async function fetchSampleFile() {
@@ -94,60 +140,63 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    const worker = new SIMSWorker();
+    setWorkerInstance(worker);
+
+    worker.onmessage = (evt) => {
+      switch (evt.data.type) {
+        case "status":
+          setStatusMessage(evt.data.message);
+          break;
+        case "progress":
+          setStatusMessage(evt.data.message);
+          setProgress(
+            Math.round((evt.data.countFinished / evt.data.totalToProcess) * 100)
+          );
+          break;
+        case "predictions":
+          setPredictions(evt.data);
+          setStatusMessage(
+            `Processed ${evt.data.totalProcessed} of ${
+              evt.data.totalNumCells
+            } cells in ${evt.data.elapsedTime?.toFixed(2)} minutes`
+          );
+          setTopGenes(
+            evt.data.overallTopGenes.map((item) => evt.data.genes[item])
+          );
+          setIsPredicting(false);
+          loadDatasets(); // Refresh the list of stored datasets
+          break;
+        case "error":
+          setStatusMessage(evt.data.error.toString());
+          setIsPredicting(false);
+          break;
+        default:
+          break;
+      }
+
+      return () => {
+        // Cleanup
+        worker.terminate();
+      };
+    };
+  }, []);
+
   // Start prediction
   async function handlePredict() {
+    if (!workerInstance) return;
     // Clear existing output
+    setProgress(0);
     setTopGenes([]);
     setPredictions(null);
     if (!selectedModel || !selectedFile) {
       setStatusMessage("Please select a model and file.");
       return;
     }
-    if (workerInstance) {
-      workerInstance.terminate();
-    }
-    const worker = new SIMSWorker();
-    setWorkerInstance(worker);
     setIsPredicting(true);
     setStatusMessage("Starting prediction...");
-    setProgress(0);
-
-    // Communicate with web worker
-    worker.onmessage = (evt) => {
-      const data = evt.data;
-      switch (data.type) {
-        case "status":
-          setStatusMessage(data.message);
-          break;
-        case "progress":
-          setStatusMessage(data.message);
-          setProgress(
-            Math.round((data.countFinished / data.totalToProcess) * 100)
-          );
-          break;
-        case "predictions":
-          setPredictions(data);
-          setStatusMessage(
-            `Processed ${data.totalProcessed} of ${
-              data.totalNumCells
-            } cells in ${data.elapsedTime?.toFixed(2)} minutes`
-          );
-          worker.postMessage({ type: "getAttentionAccumulator" });
-          setIsPredicting(false);
-          break;
-        case "attentionAccumulator":
-          updateTopGenes(data.attentionAccumulator, data.genes);
-          break;
-        case "error":
-          setStatusMessage(data.error.toString());
-          setIsPredicting(false);
-          break;
-        default:
-          break;
-      }
-    };
-
-    worker.postMessage({
+    workerInstance.postMessage({
       type: "startPrediction",
       modelURL: `${sitePath}/models`,
       modelID: selectedModel,
@@ -165,14 +214,6 @@ function App() {
     setStatusMessage("Prediction stopped.");
     setIsPredicting(false);
     setProgress(0);
-  }
-
-  // Parse top genes
-  function updateTopGenes(attentionAccumulator, genes) {
-    const N = 10;
-    const indices = Array.from(attentionAccumulator.keys());
-    indices.sort((a, b) => attentionAccumulator[b] - attentionAccumulator[a]);
-    setTopGenes(indices.slice(0, N).map((item) => genes[item]));
   }
 
   // Render
@@ -256,6 +297,22 @@ function App() {
           </Button>
         </Box>
       </Box>
+
+      <Typography variant="h5" sx={{ mt: 4 }}>
+        Results
+      </Typography>
+      <List dense>
+        {dbDatasets.map((ds) => (
+          <ListItem key={ds.datasetLabel}>
+            <ListItemText
+              primary={`${ds.datasetLabel} (model: ${ds.modelID})`}
+            />
+            <IconButton onClick={() => handleDeleteDataset(ds.datasetLabel)}>
+              <DeleteIcon />
+            </IconButton>
+          </ListItem>
+        ))}
+      </List>
 
       {/* Status and Progress */}
       <Typography>{statusMessage}</Typography>

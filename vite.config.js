@@ -10,11 +10,15 @@ export default defineConfig({
   // base: "/sims-web/", // Relative base path so we can live anywhere
   server: {
     cors: true,
+    watch: {
+      usePolling: false,
+      ignored: ["**/venv/**", "**/node_modules/**", "**/data/**"],
+    },
     headers: {
       // Required for the onnxruntime-web to use multiple threads
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
-      // "Access-Control-Expose-Headers": "*",
+      // "Access-Control-Expose-Headers": "*",kkkk
       // "Access-Control-Allow-Headers": "*",
     },
   },
