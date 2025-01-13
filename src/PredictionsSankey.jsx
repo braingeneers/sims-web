@@ -13,8 +13,30 @@ import React, { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { sankey, sankeyLinkHorizontal } from "d3-sankey";
 
-export function PredictionsSankey({ datasetLabel, width = 600, height = 400 }) {
+export function PredictionsSankey({ datasetLabel }) {
+  // Reference to our container DIV
+  const containerRef = useRef(null);
+  // Reference to our SVG
   const svgRef = useRef(null);
+
+  // Track window width in state
+  const [diagramWidth, setDiagramWidth] = useState(window.innerWidth);
+  const [diagramHeight, setDiagramHeight] = useState(400);
+
+  // Observe container size changes
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (entries[0].contentRect) {
+        setDiagramWidth(entries[0].contentRect.width);
+      }
+    });
+    resizeObserver.observe(containerRef.current);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   const [dbData, setDbData] = useState(null);
 
   // Load data from IndexedDB
@@ -105,7 +127,7 @@ export function PredictionsSankey({ datasetLabel, width = 600, height = 400 }) {
       .nodePadding(10)
       .extent([
         [0, 0],
-        [width, height],
+        [diagramWidth, diagramHeight],
       ]);
 
     const graph = sankeyLayout({
@@ -148,10 +170,14 @@ export function PredictionsSankey({ datasetLabel, width = 600, height = 400 }) {
       .attr("dy", "0.35em")
       .attr("text-anchor", "end")
       .text((d) => d.name)
-      .filter((d) => d.x0 < width / 2)
+      .filter((d) => d.x0 < diagramWidth / 2)
       .attr("x", 6 + (graph.nodes[0]?.x1 - graph.nodes[0]?.x0 || 0))
       .attr("text-anchor", "start");
-  }, [dbData, width, height]);
+  }, [dbData, diagramWidth, diagramHeight]);
 
-  return <svg ref={svgRef} width={width} height={height}></svg>;
+  return (
+    <div ref={containerRef} style={{ width: "100%", height: diagramHeight }}>
+      <svg ref={svgRef} width={diagramWidth} height={diagramHeight}></svg>
+    </div>
+  );
 }
