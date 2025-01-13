@@ -10,6 +10,9 @@ import * as ort from "onnxruntime-web";
 // Includes WebAssembly single-threaded only, with training support
 // import * as ort from "onnxruntime-web/training";
 
+// Top K genes to accumulate attention for
+self.K = 10;
+
 // Worker global variables
 self.model = null;
 self.attentionAccumulators = null;
@@ -214,35 +217,6 @@ function fillBatchData(
       }
     }
   }
-}
-
-export async function storeOutputInIndexedDB(
-  modelID,
-  datasetLabel,
-  coords,
-  cellTypeNames,
-  cellTypes,
-  topGeneIndicesByClass
-) {
-  const request = indexedDB.open("sims-web", 1);
-  request.onsuccess = () => {
-    const db = request.result;
-    const tx = db.transaction("datasets", "readwrite");
-    const store = tx.objectStore("datasets");
-    store.put({
-      modelID,
-      datasetLabel,
-      coords, // Float32Array of length 2*n
-      cellTypeNames, // Array of strings
-      cellTypes, // Array of indices
-      topGeneIndicesByClass,
-    });
-    tx.oncomplete = () => db.close();
-  };
-
-  request.onerror = () => {
-    console.error("IndexedDB error", request.error);
-  };
 }
 
 async function predict(event) {
@@ -485,7 +459,9 @@ async function predict(event) {
     const endTime = Date.now(); // Record end time
     const elapsedTime = (endTime - startTime) / 60000; // Calculate elapsed time in minutes
 
-    // Calculate coordinates of each cell by applying umap to its encodings vector
+    // ========================================================================
+    // Run UMAP on the encoding to calculate a 2D projection
+    // ========================================================================
     const prando = new Prando(42);
     const random = () => prando.next();
 
@@ -512,9 +488,10 @@ async function predict(event) {
       throw error;
     }
 
+    // ========================================================================
     // Calculate top K gene indices per class and overall as well as
     // the overall top k gene indices for all predictions
-    const K = 10;
+    // ========================================================================
     let topGeneIndicesByClass = [];
 
     function topKIndices(x, k) {
@@ -531,7 +508,7 @@ async function predict(event) {
             i * self.model.genes.length,
             (i + 1) * self.model.genes.length
           ),
-          K
+          self.K
         )
       );
       for (let j = 0; j < self.model.genes.length; j++) {
@@ -541,14 +518,33 @@ async function predict(event) {
     }
     let overallTopGenes = topKIndices(overallAccumulator, K);
 
-    await storeOutputInIndexedDB(
-      self.model.id,
-      event.data.h5File.name,
-      coordinates.flat(),
-      self.model.classes,
-      labels.map((label) => label[0][0]),
-      topGeneIndicesByClass
-    );
+    const cellTypes = labels.map((label) => label[0][0]);
+    const cellTypeProbabilities = labels.map((label) => label[1][0]);
+
+    // Store results in IndexedDB
+    const request = indexedDB.open("sims-web", 1);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("datasets", "readwrite");
+      const store = tx.objectStore("datasets");
+      store.put({
+        // ! Used by UCSC Cell Browser
+        datasetLabel: event.data.h5File.name,
+        coords: coordinates.flat(), // Float32Array of length 2*n
+        cellTypeNames: self.model.classes, // Array of strings
+        cellTypes: cellTypes,
+
+        // Used for the UIs and export in this application
+        modelID: self.model.id,
+        topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
+        cellTypeProbabilities,
+        genes: self.model.genes, // Array of strings
+      });
+      tx.oncomplete = () => db.close();
+    };
+    request.onerror = () => {
+      console.error("IndexedDB error", request.error);
+    };
 
     self.postMessage({
       type: "predictions",

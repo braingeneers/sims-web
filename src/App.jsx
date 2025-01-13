@@ -26,6 +26,7 @@ import GitHubIcon from "@mui/icons-material/GitHub";
 
 import { PredictionsTable } from "./PredictionsTable";
 import { PredictionsPlot } from "./PredictionsPlot";
+import { PredictionsSankey } from "./PredictionsSankey";
 
 import SIMSWorker from "./worker?worker";
 
@@ -328,6 +329,10 @@ function App() {
           Unable to use multiple cpu cores - notify the site owner
         </Alert>
       )}
+
+      {selectedFile ? (
+        <PredictionsSankey datasetLabel={selectedFile.name} />
+      ) : null}
 
       {/* Layout for top genes + scatter plot */}
       <Box display="flex" mt={4}>
