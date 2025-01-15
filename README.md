@@ -63,7 +63,7 @@ netron public/models/default.onnx
 
 ONNX supports multithreaded inference. We allocate total cores - 2 for inference. This leaves 1 thread for the main loop so the UI can remain responsible and 1 thread for ONNX to coordinate via its 'proxy' setting (see worker.js for details).
 
-Processed 5277 of 175925 cells in 0.71 minutes on a MacBook M3 Pro or around 8-10k samples per minute.
+Processed 1759 cells in 0.18 minutes on a MacBook M3 Pro or around 10k samples per minute.
 
 # Leveraging a GPU
 

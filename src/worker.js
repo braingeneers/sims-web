@@ -219,23 +219,31 @@ function fillBatchData(
   }
 }
 
+async function deleteAllDatasets() {
+  const request = indexedDB.open("sims-web", 1);
+  request.onsuccess = () => {
+    const db = request.result;
+    if (db.objectStoreNames.contains("datasets")) {
+      const tx = db.transaction("datasets", "readwrite");
+      const store = tx.objectStore("datasets");
+      const getAllRequest = store.getAll();
+      getAllRequest.onsuccess = () => {
+        const datasets = getAllRequest.result || [];
+        datasets.forEach((d) => {
+          console.log("Deleting dataset:", d);
+          store.delete(d.datasetLabel);
+        });
+      };
+      tx.oncomplete = () => db.close();
+    }
+  };
+  request.onerror = () => {
+    console.error("IndexedDB error", request.error);
+  };
+}
+
 async function predict(event) {
-  // Delete existing dataset from IndexedDB
-  {
-    const request = indexedDB.open("sims-web", 1);
-    request.onsuccess = () => {
-      const db = request.result;
-      if (db.objectStoreNames.contains("datasets")) {
-        const tx = db.transaction("datasets", "readwrite");
-        const store = tx.objectStore("datasets");
-        store.delete(event.data.h5File.name);
-        tx.oncomplete = () => db.close();
-      }
-    };
-    request.onerror = () => {
-      console.error("IndexedDB error", request.error);
-    };
-  }
+  await deleteAllDatasets();
 
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;

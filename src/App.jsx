@@ -15,12 +15,10 @@ import {
   List,
   ListItem,
   ListItemText,
-  IconButton,
 } from "@mui/material";
 
 import { MuiFileInput } from "mui-file-input";
 import NewspaperIcon from "@mui/icons-material/Newspaper";
-import DeleteIcon from "@mui/icons-material/Delete";
 
 import GitHubIcon from "@mui/icons-material/GitHub";
 
@@ -42,6 +40,7 @@ function App() {
   const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
   const [dbDatasets, setDbDatasets] = useState([]);
+  const [dataset, setDataset] = useState(null);
 
   const resultsRef = useRef(null);
 
@@ -56,11 +55,11 @@ function App() {
   useEffect(() => {
     fetchModels();
     fetchSampleFile();
-    loadDatasets();
+    loadDataset();
   }, []);
 
-  // Load datasets from IndexedDB
-  async function loadDatasets() {
+  // Load the first dataset
+  async function loadDataset() {
     const request = indexedDB.open("sims-web", 1);
     request.onupgradeneeded = (event) => {
       console.log("Creating results database");
@@ -75,7 +74,7 @@ function App() {
         const getAllRequest = store.getAll();
         getAllRequest.onsuccess = () => {
           const result = getAllRequest.result || [];
-          setDbDatasets(result);
+          setDataset(result[0]);
           db.close();
         };
       } else {
@@ -95,7 +94,7 @@ function App() {
       store.delete(label);
       tx.oncomplete = () => {
         db.close();
-        loadDatasets();
+        loadDataset();
       };
     };
   }
@@ -167,7 +166,7 @@ function App() {
             evt.data.overallTopGenes.map((item) => evt.data.genes[item])
           );
           setIsPredicting(false);
-          loadDatasets(); // Refresh the list of stored datasets
+          loadDataset(); // Refresh the list of stored datasets
           break;
         case "error":
           setStatusMessage(evt.data.error.toString());
@@ -299,10 +298,8 @@ function App() {
         </Box>
       </Box>
 
-      <Typography variant="h5" sx={{ mt: 4 }}>
-        Results
-      </Typography>
-      <List dense>
+      {/* List of datasets - hidden to simplify to just one for now */}
+      {/* <List dense>
         {dbDatasets.map((ds) => (
           <ListItem key={ds.datasetLabel}>
             <ListItemText
@@ -313,7 +310,7 @@ function App() {
             </IconButton>
           </ListItem>
         ))}
-      </List>
+      </List> */}
 
       {/* Status and Progress */}
       <Typography>{statusMessage}</Typography>
@@ -330,8 +327,14 @@ function App() {
         </Alert>
       )}
 
-      {selectedFile ? (
-        <PredictionsSankey datasetLabel={selectedFile.name} />
+      {dataset && (
+        <Typography variant="h5" sx={{ mt: 4 }}>
+          Results for {dataset.datasetLabel}
+        </Typography>
+      )}
+
+      {dataset ? (
+        <PredictionsSankey datasetLabel={dataset.datasetLabel} />
       ) : null}
 
       {/* Layout for top genes + scatter plot */}
