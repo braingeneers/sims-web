@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   Alert,
   Container,
@@ -36,11 +36,8 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [isPredicting, setIsPredicting] = useState(false);
-  const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
   const [dataset, setDataset] = useState(null);
-
-  const resultsRef = useRef(null);
 
   const sitePath =
     window.location.origin +
@@ -138,7 +135,6 @@ function App() {
           );
           break;
         case "predictions":
-          setPredictions(evt.data);
           setStatusMessage(
             `Processed ${evt.data.totalProcessed} of ${
               evt.data.totalNumCells
@@ -168,7 +164,6 @@ function App() {
     // Clear existing output
     setProgress(0);
     setDataset(null);
-    setPredictions(null);
     if (!selectedModel || !selectedFile) {
       setStatusMessage("Please select a model and file.");
       return;
@@ -326,8 +321,15 @@ function App() {
       )}
 
       {/* Container for table or results */}
-      <Box ref={resultsRef} mt={4}></Box>
-      <PredictionsTable predictions={predictions} />
+      {dataset && (
+        <PredictionsTable
+          cellNames={dataset.cellNames}
+          predictions={dataset.predictions}
+          probabilities={dataset.probabilities}
+          cellTypeNames={dataset.cellTypeNames}
+          coordinates={dataset.coords}
+        />
+      )}
     </Container>
   );
 }

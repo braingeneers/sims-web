@@ -527,7 +527,6 @@ async function predict(event) {
     let overallTopGenes = topKIndices(overallAccumulator, self.K);
 
     const cellTypes = labels.map((label) => label[0][0]);
-    const cellTypeProbabilities = labels.map((label) => label[1][0]);
 
     // Store results in IndexedDB
     const request = indexedDB.open("sims-web", 1);
@@ -545,9 +544,11 @@ async function predict(event) {
         // Used for the UIs and export in this application
         modelID: self.model.id,
         topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
-        cellTypeProbabilities,
         genes: self.model.genes, // Array of strings
         overallTopGenes,
+        cellNames,
+        predictions: labels.map((label) => label[0]),
+        probabilities: labels.map((label) => label[1]),
       });
       tx.oncomplete = () => db.close();
     };
@@ -557,10 +558,6 @@ async function predict(event) {
 
     self.postMessage({
       type: "predictions",
-      cellNames,
-      classes: self.model.classes,
-      labels,
-      coordinates,
       elapsedTime,
       totalProcessed: cellNames.length,
       totalNumCells,

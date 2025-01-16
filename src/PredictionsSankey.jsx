@@ -9,9 +9,10 @@
  * See:
  * https://observablehq.com/@iashishsingh/sankey-diagram-path-highlighting
  */
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { sankey, sankeyLinkHorizontal } from "d3-sankey";
+import PropTypes from "prop-types";
 
 export function PredictionsSankey({ datasetLabel }) {
   // Reference to our container DIV
@@ -338,3 +339,7 @@ export function PredictionsSankey({ datasetLabel }) {
     </div>
   );
 }
+
+PredictionsSankey.propTypes = {
+  datasetLabel: PropTypes.string,
+};

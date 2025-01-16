@@ -1,4 +1,3 @@
-// import React from "react";
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
 import Table from "@mui/material/Table";
@@ -11,32 +10,29 @@ import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import DownloadIcon from "@mui/icons-material/Download";
 
-export const PredictionsTable = ({ predictions }) => {
-  if (!predictions) {
-    return <div></div>; // Return an empty div
-  }
-
-  function downloadCSV(predictions) {
-    if (!predictions) {
-      return;
-    }
+export const PredictionsTable = ({
+  cellNames,
+  predictions,
+  probabilities,
+  cellTypeNames,
+  coordinates,
+}) => {
+  function downloadCSV() {
     let csvContent =
       "cell_id,pred_0,pred_1,pred_2,prob_0,prob_1,prob_2,umap_0,umap_1\n";
 
-    predictions.cellNames.forEach((cellName, cellIndex) => {
+    cellNames.forEach((cellName, cellIndex) => {
       let cellResults = "";
       for (let i = 0; i < 3; i++) {
-        cellResults += `,${
-          predictions.classes[predictions.labels[cellIndex][0][i]]
-        }`;
+        cellResults += `,${cellTypeNames[predictions[cellIndex][i]]}`;
       }
       for (let i = 0; i < 3; i++) {
-        cellResults += `,${predictions.labels[cellIndex][1][i].toFixed(4)}`;
+        cellResults += `,${probabilities[cellIndex][i].toFixed(4)}`;
       }
-      if (cellIndex < predictions.coordinates.length) {
-        cellResults += `,${predictions.coordinates[cellIndex][0].toFixed(
-          4
-        )},${predictions.coordinates[cellIndex][1].toFixed(4)}`;
+      if (cellIndex < coordinates.length / 2) {
+        cellResults += `,${coordinates[2 * cellIndex].toFixed(4)},${coordinates[
+          2 * cellIndex + 1
+        ].toFixed(4)}`;
       } else {
         // If there are no UMAP coordinates, just add a comma
         cellResults += ",,";
@@ -80,7 +76,7 @@ export const PredictionsTable = ({ predictions }) => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {predictions.cellNames.slice(0, 100).map((cellName, cellIndex) => (
+          {cellNames.slice(0, 100).map((cellName, cellIndex) => (
             <TableRow
               key={cellName}
               sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
@@ -88,24 +84,12 @@ export const PredictionsTable = ({ predictions }) => {
               <TableCell component="th" scope="row">
                 {cellName}
               </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.labels[cellIndex][0][0]]}
-              </TableCell>
-              <TableCell>
-                {predictions.labels[cellIndex][1][0].toFixed(4)}
-              </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.labels[cellIndex][0][1]]}
-              </TableCell>
-              <TableCell>
-                {predictions.labels[cellIndex][1][1].toFixed(4)}
-              </TableCell>
-              <TableCell>
-                {predictions.classes[predictions.labels[cellIndex][0][2]]}
-              </TableCell>
-              <TableCell>
-                {predictions.labels[cellIndex][1][2].toFixed(4)}
-              </TableCell>
+              <TableCell>{cellTypeNames[predictions[cellIndex][0]]}</TableCell>
+              <TableCell>{probabilities[cellIndex][0].toFixed(4)}</TableCell>
+              <TableCell>{cellTypeNames[predictions[cellIndex][1]]}</TableCell>
+              <TableCell>{probabilities[cellIndex][1].toFixed(4)}</TableCell>
+              <TableCell>{cellTypeNames[predictions[cellIndex][2]]}</TableCell>
+              <TableCell>{probabilities[cellIndex][2].toFixed(4)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -115,14 +99,9 @@ export const PredictionsTable = ({ predictions }) => {
 };
 
 PredictionsTable.propTypes = {
-  predictions: PropTypes.shape({
-    labels: PropTypes.arrayOf(
-      PropTypes.arrayOf([PropTypes.string, PropTypes.float])
-    ),
-    coordinates: PropTypes.arrayOf(
-      PropTypes.arrayOf([PropTypes.float, PropTypes.float])
-    ),
-    cellNames: PropTypes.arrayOf(PropTypes.string),
-    classes: PropTypes.arrayOf(PropTypes.string),
-  }),
+  cellNames: PropTypes.arrayOf(PropTypes.string),
+  predictions: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number)),
+  probabilities: PropTypes.arrayOf(PropTypes.instanceOf(Float32Array)),
+  cellTypeNames: PropTypes.arrayOf(PropTypes.string),
+  coordinates: PropTypes.arrayOf(PropTypes.number),
 };
