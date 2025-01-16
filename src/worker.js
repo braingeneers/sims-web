@@ -524,7 +524,7 @@ async function predict(event) {
           self.attentionAccumulators[i * self.model.genes.length + j];
       }
     }
-    let overallTopGenes = topKIndices(overallAccumulator, K);
+    let overallTopGenes = topKIndices(overallAccumulator, self.K);
 
     const cellTypes = labels.map((label) => label[0][0]);
     const cellTypeProbabilities = labels.map((label) => label[1][0]);
@@ -547,6 +547,7 @@ async function predict(event) {
         topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
         cellTypeProbabilities,
         genes: self.model.genes, // Array of strings
+        overallTopGenes,
       });
       tx.oncomplete = () => db.close();
     };
@@ -563,7 +564,6 @@ async function predict(event) {
       elapsedTime,
       totalProcessed: cellNames.length,
       totalNumCells,
-      overallTopGenes,
       genes: self.model.genes,
     });
   } catch (error) {

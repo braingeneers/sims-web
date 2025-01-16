@@ -36,10 +36,8 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [isPredicting, setIsPredicting] = useState(false);
-  const [topGenes, setTopGenes] = useState([]);
   const [predictions, setPredictions] = useState(null);
   const [workerInstance, setWorkerInstance] = useState(null);
-  const [dbDatasets, setDbDatasets] = useState([]);
   const [dataset, setDataset] = useState(null);
 
   const resultsRef = useRef(null);
@@ -80,22 +78,6 @@ function App() {
       } else {
         console.log("No existing results found");
       }
-    };
-  }
-
-  // Delete a dataset
-  function handleDeleteDataset(label) {
-    console.log("Deleting results", label);
-    const request = indexedDB.open("sims-web", 1);
-    request.onsuccess = () => {
-      const db = request.result;
-      const tx = db.transaction("datasets", "readwrite");
-      const store = tx.objectStore("datasets");
-      store.delete(label);
-      tx.oncomplete = () => {
-        db.close();
-        loadDataset();
-      };
     };
   }
 
@@ -162,9 +144,6 @@ function App() {
               evt.data.totalNumCells
             } cells in ${evt.data.elapsedTime?.toFixed(2)} minutes`
           );
-          setTopGenes(
-            evt.data.overallTopGenes.map((item) => evt.data.genes[item])
-          );
           setIsPredicting(false);
           loadDataset(); // Refresh the list of stored datasets
           break;
@@ -188,7 +167,7 @@ function App() {
     if (!workerInstance) return;
     // Clear existing output
     setProgress(0);
-    setTopGenes([]);
+    setDataset(null);
     setPredictions(null);
     if (!selectedModel || !selectedFile) {
       setStatusMessage("Please select a model and file.");
@@ -298,20 +277,6 @@ function App() {
         </Box>
       </Box>
 
-      {/* List of datasets - hidden to simplify to just one for now */}
-      {/* <List dense>
-        {dbDatasets.map((ds) => (
-          <ListItem key={ds.datasetLabel}>
-            <ListItemText
-              primary={`${ds.datasetLabel} (model: ${ds.modelID})`}
-            />
-            <IconButton onClick={() => handleDeleteDataset(ds.datasetLabel)}>
-              <DeleteIcon />
-            </IconButton>
-          </ListItem>
-        ))}
-      </List> */}
-
       {/* Status and Progress */}
       <Typography>{statusMessage}</Typography>
       {isPredicting && (
@@ -333,26 +298,32 @@ function App() {
         </Typography>
       )}
 
-      {dataset ? (
-        <PredictionsSankey datasetLabel={dataset.datasetLabel} />
-      ) : null}
-
-      {/* Layout for top genes + scatter plot */}
-      <Box display="flex" mt={4}>
-        <Box width="25%" mr={4}>
-          <Typography variant="h6">
-            {topGenes.length ? "Top 10 Genes" : ""}
-          </Typography>
-          <List dense>
-            {topGenes.map((gene) => (
-              <ListItem key={gene}>
-                <ListItemText primary={`${gene}`} />
-              </ListItem>
-            ))}
-          </List>
+      {/* Layout for sankey + top genes + scatter plot */}
+      {dataset && (
+        <Box display="flex" mt={4}>
+          <Box width="40%" mr={4}>
+            <PredictionsSankey datasetLabel={dataset.datasetLabel} />
+          </Box>
+          <Box width="20%" mr={4}>
+            <Typography variant="h6">Top Genes</Typography>
+            <List dense>
+              {dataset.overallTopGenes.map((geneIndex) => (
+                <ListItem key={geneIndex}>
+                  <ListItemText primary={`${dataset.genes[geneIndex]}`} />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+          <Box width="40%" mr={4}>
+            <PredictionsPlot
+              width={450}
+              height={450}
+              labels={dataset.cellTypes}
+              coordinates={dataset.coords}
+            />
+          </Box>
         </Box>
-        <PredictionsPlot width={450} height={450} predictions={predictions} />
-      </Box>
+      )}
 
       {/* Container for table or results */}
       <Box ref={resultsRef} mt={4}></Box>

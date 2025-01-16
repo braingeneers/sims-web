@@ -2,16 +2,17 @@ import * as d3 from "d3";
 import { useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 
-export const PredictionsPlot = ({ width, height, predictions }) => {
+export const PredictionsPlot = ({
+  width,
+  height,
+  labels,
+  coordinates,
+}) => {
   const ref = useRef();
 
   useEffect(() => {
     // set the dimensions and margins of the graph
     d3.select(ref.current).selectAll("*").remove();
-
-    if (!predictions) {
-      return () => {}; // Return an empty function
-    }
 
     const margin = { top: 10, right: 30, bottom: 30, left: 40 };
     const inner_width = width - margin.left - margin.right;
@@ -27,11 +28,11 @@ export const PredictionsPlot = ({ width, height, predictions }) => {
 
     const x = d3
       .scaleLinear()
-      .domain(d3.extent(predictions.coordinates, (d) => d[0]))
+      .domain(d3.extent(coordIterator(coordinates), (d) => d[0]))
       .range([0, inner_width]);
     const y = d3
       .scaleLinear()
-      .domain(d3.extent(predictions.coordinates, (d) => d[1]))
+      .domain(d3.extent(coordIterator(coordinates), (d) => d[1]))
       .range([inner_height, 0]);
     svg
       .append("g")
@@ -39,16 +40,23 @@ export const PredictionsPlot = ({ width, height, predictions }) => {
       .call(d3.axisBottom(x));
     svg.append("g").call(d3.axisLeft(y));
 
+    // Convert 1d array of [x,y,x,y..] coordinates to 1d array of [x, y] pairs
+    function* coordIterator(coords) {
+      for (let i = 0; i < coords.length; i += 2) {
+        yield [coords[i], coords[i + 1]];
+      }
+    }
+
     const color = d3.scaleOrdinal(d3.schemeCategory10);
     svg
       .selectAll("circle")
-      .data(predictions.coordinates)
+      .data(coordIterator(coordinates))
       .enter()
       .append("circle")
       .attr("cx", (d) => x(d[0]))
       .attr("cy", (d) => y(d[1]))
       .attr("r", 3)
-      .style("fill", (d, i) => color(predictions.labels[i][0][0]));
+      .style("fill", (d, i) => color(labels[i]));
   });
 
   return <svg width={width} height={height} id="predictions-plot" ref={ref} />;
@@ -57,13 +65,7 @@ export const PredictionsPlot = ({ width, height, predictions }) => {
 PredictionsPlot.propTypes = {
   width: PropTypes.number,
   height: PropTypes.number,
-  predictions: PropTypes.shape({
-    labels: PropTypes.arrayOf([
-      PropTypes.arrayOf(PropTypes.number),
-      PropTypes.arrayOf(PropTypes.float),
-    ]),
-    coordinates: PropTypes.arrayOf(
-      PropTypes.arrayOf([PropTypes.float, PropTypes.float])
-    ),
-  }),
+  classes: PropTypes.arrayOf(PropTypes.string),
+  labels: PropTypes.arrayOf(PropTypes.number),
+  coordinates: PropTypes.arrayOf(PropTypes.number),
 };
