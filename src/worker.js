@@ -4,6 +4,8 @@ import * as UMAP from "umap-js";
 
 import * as ort from "onnxruntime-web";
 
+import { openDB, deleteDB, wrap, unwrap } from "idb";
+
 // Includes WebAssembly backend only
 // import * as ort from "onnxruntime-web/wasm";
 
@@ -219,32 +221,7 @@ function fillBatchData(
   }
 }
 
-async function deleteAllDatasets() {
-  const request = indexedDB.open("sims-web", 1);
-  request.onsuccess = () => {
-    const db = request.result;
-    if (db.objectStoreNames.contains("datasets")) {
-      const tx = db.transaction("datasets", "readwrite");
-      const store = tx.objectStore("datasets");
-      const getAllRequest = store.getAll();
-      getAllRequest.onsuccess = () => {
-        const datasets = getAllRequest.result || [];
-        datasets.forEach((d) => {
-          console.log("Deleting dataset:", d);
-          store.delete(d.datasetLabel);
-        });
-      };
-      tx.oncomplete = () => db.close();
-    }
-  };
-  request.onerror = () => {
-    console.error("IndexedDB error", request.error);
-  };
-}
-
 async function predict(event) {
-  await deleteAllDatasets();
-
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;
   const { FS } = Module;
@@ -529,39 +506,34 @@ async function predict(event) {
     const cellTypes = labels.map((label) => label[0][0]);
 
     // Store results in IndexedDB
-    const request = indexedDB.open("sims-web", 1);
-    request.onsuccess = () => {
-      const db = request.result;
-      const tx = db.transaction("datasets", "readwrite");
-      const store = tx.objectStore("datasets");
-      store.put({
-        // ! Used by UCSC Cell Browser
-        datasetLabel: event.data.h5File.name,
-        coords: coordinates.flat(), // Float32Array of length 2*n
-        cellTypeNames: self.model.classes, // Array of strings
-        cellTypes: cellTypes,
+    const db = await openDB("sims-web");
+    const tx = db.transaction("datasets", "readwrite");
+    const store = tx.objectStore("datasets");
+    await store.put({
+      // ! Used by UCSC Cell Browser
+      datasetLabel: event.data.h5File.name,
+      coords: coordinates.flat(), // Float32Array of length 2*n
+      cellTypeNames: self.model.classes, // Array of strings
+      cellTypes: cellTypes,
 
-        // Used for the UIs and export in this application
-        modelID: self.model.id,
-        topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
-        genes: self.model.genes, // Array of strings
-        overallTopGenes,
-        cellNames,
-        predictions: labels.map((label) => label[0]),
-        probabilities: labels.map((label) => label[1]),
-      });
-      tx.oncomplete = () => db.close();
-    };
-    request.onerror = () => {
-      console.error("IndexedDB error", request.error);
-    };
+      // Used for the UIs and export in this application
+      modelID: self.model.id,
+      topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
+      genes: self.model.genes, // Array of strings
+      overallTopGenes,
+      cellNames,
+      predictions: labels.map((label) => label[0]),
+      probabilities: labels.map((label) => label[1]),
+    });
+    await tx.done;
+    db.close();
 
     self.postMessage({
-      type: "predictions",
+      type: "finished",
+      datasetLabel: event.data.h5File.name,
       elapsedTime,
       totalProcessed: cellNames.length,
       totalNumCells,
-      genes: self.model.genes,
     });
   } catch (error) {
     // FS.unmount("/work");

@@ -18,13 +18,15 @@ import {
 } from "@mui/material";
 
 import { MuiFileInput } from "mui-file-input";
-import NewspaperIcon from "@mui/icons-material/Newspaper";
 
+import NewspaperIcon from "@mui/icons-material/Newspaper";
 import GitHubIcon from "@mui/icons-material/GitHub";
 
 import { PredictionsTable } from "./PredictionsTable";
 import { PredictionsPlot } from "./PredictionsPlot";
 import { PredictionsSankey } from "./PredictionsSankey";
+
+import { openDB, deleteDB, wrap, unwrap } from "idb";
 
 import SIMSWorker from "./worker?worker";
 
@@ -46,7 +48,6 @@ function App() {
       window.location.pathname.lastIndexOf("/")
     );
 
-  // On mount, load models list
   useEffect(() => {
     fetchModels();
     fetchSampleFile();
@@ -55,27 +56,24 @@ function App() {
 
   // Load the first dataset
   async function loadDataset() {
-    const request = indexedDB.open("sims-web", 1);
-    request.onupgradeneeded = (event) => {
-      console.log("Creating results database");
-      const db = event.target.result;
-      db.createObjectStore("datasets", { keyPath: "datasetLabel" });
-    };
-    request.onsuccess = () => {
-      const db = request.result;
-      if (db.objectStoreNames.contains("datasets")) {
-        const tx = db.transaction("datasets", "readonly");
-        const store = tx.objectStore("datasets");
-        const getAllRequest = store.getAll();
-        getAllRequest.onsuccess = () => {
-          const result = getAllRequest.result || [];
-          setDataset(result[0]);
-          db.close();
-        };
-      } else {
-        console.log("No existing results found");
-      }
-    };
+    const db = await openDB("sims-web", 1, {
+      upgrade(db) {
+        // Create a store of objects
+        const store = db.createObjectStore("datasets", {
+          // The 'id' property of the object will be the key.
+          keyPath: "datasetLabel",
+          // If it isn't explicitly set, create a value by auto incrementing.
+          autoIncrement: true,
+        });
+      },
+    });
+
+    const keys = await db.getAllKeys("datasets");
+    if (keys.length > 0) {
+      setDataset(await db.get("datasets", keys[0]));
+    } else {
+      console.log("No existing results found");
+    }
   }
 
   // Fill in a sample file so a user can just hit predict to try out
@@ -134,14 +132,14 @@ function App() {
             Math.round((evt.data.countFinished / evt.data.totalToProcess) * 100)
           );
           break;
-        case "predictions":
+        case "finished":
           setStatusMessage(
             `Processed ${evt.data.totalProcessed} of ${
               evt.data.totalNumCells
             } cells in ${evt.data.elapsedTime?.toFixed(2)} minutes`
           );
           setIsPredicting(false);
-          loadDataset(); // Refresh the list of stored datasets
+          loadDataset();
           break;
         case "error":
           setStatusMessage(evt.data.error.toString());
@@ -161,9 +159,18 @@ function App() {
   // Start prediction
   async function handlePredict() {
     if (!workerInstance) return;
+
     // Clear existing output
     setProgress(0);
     setDataset(null);
+
+    // Delete all datasets
+    const db = await openDB("sims-web");
+    const tx = db.transaction("datasets", "readwrite");
+    const store = tx.objectStore("datasets");
+    store.clear();
+    await tx.done;
+
     if (!selectedModel || !selectedFile) {
       setStatusMessage("Please select a model and file.");
       return;
