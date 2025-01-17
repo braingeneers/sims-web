@@ -2,6 +2,14 @@
 
 These are more notes at the moment then actual benchmarks...
 
+
+## 1/17/2025
+
+#threads/batch size
+10/9 Processed 17592 of 175925 cells in 4.82 minutes
+
+
+
 ## Latest version with dynamic batch size, multi-threaded ONNX and double buffering of I/O
 
 #threads/batch size
