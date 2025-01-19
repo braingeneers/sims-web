@@ -26,7 +26,7 @@ import { PredictionsTable } from "./PredictionsTable";
 import { PredictionsPlot } from "./PredictionsPlot";
 import { PredictionsSankey } from "./PredictionsSankey";
 
-import { openDB, deleteDB, wrap, unwrap } from "idb";
+import { openDB } from "idb";
 
 import SIMSWorker from "./worker?worker";
 
@@ -54,25 +54,38 @@ function App() {
     loadDataset();
   }, []);
 
-  // Load the first dataset
-  async function loadDataset() {
-    const db = await openDB("sims-web", 1, {
-      upgrade(db) {
-        // Create a store of objects
-        const store = db.createObjectStore("datasets", {
-          // The 'id' property of the object will be the key.
-          keyPath: "datasetLabel",
-          // If it isn't explicitly set, create a value by auto incrementing.
-          autoIncrement: true,
-        });
-      },
-    });
+  const DB_VERSION = 2;
 
-    const keys = await db.getAllKeys("datasets");
-    if (keys.length > 0) {
-      setDataset(await db.get("datasets", keys[0]));
-    } else {
-      console.log("No existing results found");
+  async function loadDataset() {
+    try {
+      const db = await openDB("sims-web", DB_VERSION, {
+        upgrade(db, oldVersion, newVersion, transaction) {
+          // Case 1: No database - create it
+          if (!db.objectStoreNames.contains("datasets")) {
+            db.createObjectStore("datasets", {
+              keyPath: "datasetLabel",
+              autoIncrement: true,
+            });
+          }
+
+          // Case 2: Version 1 exists - clear it
+          if (oldVersion === 1) {
+            transaction.objectStore("datasets").clear();
+            setStatusMessage("Database upgraded - previous results cleared");
+          }
+        },
+      });
+
+      // Case 3: Version 2 exists - load first dataset
+      const keys = await db.getAllKeys("datasets");
+      if (keys.length > 0) {
+        setDataset(await db.get("datasets", keys[0]));
+      }
+
+      db.close();
+    } catch (error) {
+      console.error("Database error:", error);
+      setStatusMessage("Error accessing database");
     }
   }
 
@@ -304,7 +317,7 @@ function App() {
       {dataset && (
         <Box display="flex" mt={4}>
           <Box width="40%" mr={4}>
-            <PredictionsSankey datasetLabel={dataset.datasetLabel} />
+            {/* <PredictionsSankey datasetLabel={dataset.datasetLabel} /> */}
           </Box>
           <Box width="20%" mr={4}>
             <Typography variant="h6">Top Genes</Typography>

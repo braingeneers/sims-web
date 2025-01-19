@@ -4,7 +4,7 @@ import * as UMAP from "umap-js";
 
 import * as ort from "onnxruntime-web";
 
-import { openDB, deleteDB, wrap, unwrap } from "idb";
+import { openDB } from "idb";
 
 // Includes WebAssembly backend only
 // import * as ort from "onnxruntime-web/wasm";

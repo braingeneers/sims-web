@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "preview-debug": "vite preview --debug",
-    "serve-dist-python": "python -m http.server 3000 -d dist/",
+    "serve-dist-python": "python -m http.server 5173 -d dist/",
+    "serve-prod-python": "python -m http.server 5173 -d prod/",
     "deploy": "rsync -avh --delete dist/ rcurrie@hgwdev.gi.ucsc.edu:/usr/local/apache/htdocs-cells/sims/ --dry-run",
     "netron": "netron public/models/default.onnx"
   },
@@ -32,7 +33,8 @@
     "umap-js": "^1.4.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
@@ -41,7 +43,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "gh-pages": "^6.2.0",
-    "globals": "^15.13.0",
+    "globals": "^15.14.0",
     "vite": "^6.0.3",
     "vite-plugin-static-copy": "^2.2.0"
   }
