@@ -14,7 +14,12 @@ import * as d3 from "d3";
 import { sankey, sankeyLinkHorizontal } from "d3-sankey";
 import PropTypes from "prop-types";
 
-export function PredictionsSankey({ datasetLabel }) {
+export const PredictionsSankey = ({
+  cellTypes,
+  cellTypeNames,
+  topGeneIndicesByClass,
+  genes,
+}) => {
   // Reference to our container DIV
   const containerRef = useRef(null);
   // Reference to our SVG
@@ -38,31 +43,8 @@ export function PredictionsSankey({ datasetLabel }) {
     return () => resizeObserver.disconnect();
   }, []);
 
-  const [dbData, setDbData] = useState(null);
-
-  // Load data from IndexedDB
-  useEffect(() => {
-    const request = indexedDB.open("sims-web", 1);
-    request.onsuccess = () => {
-      const db = request.result;
-      const tx = db.transaction("datasets", "readonly");
-      const store = tx.objectStore("datasets");
-      const getRequest = store.get(datasetLabel); // fetch by datasetLabel
-      getRequest.onsuccess = () => {
-        const result = getRequest.result;
-        if (result) {
-          setDbData(result);
-        }
-        db.close();
-      };
-    };
-  }, [datasetLabel]);
-
   // Build and draw sankey when dbData changes
   useEffect(() => {
-    if (!dbData || !svgRef.current) return;
-
-    const { cellTypes, cellTypeNames, topGeneIndicesByClass, genes } = dbData;
     if (!cellTypes || !cellTypeNames || !topGeneIndicesByClass || !genes)
       return;
 
@@ -331,15 +313,18 @@ export function PredictionsSankey({ datasetLabel }) {
     //   .filter((d) => d.x0 < diagramWidth / 2)
     //   .attr("x", 6 + (graph.nodes[0]?.x1 - graph.nodes[0]?.x0 || 0))
     //   .attr("text-anchor", "start");
-  }, [dbData, diagramWidth, diagramHeight]);
+  }, [diagramWidth, diagramHeight]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: diagramHeight }}>
       <svg ref={svgRef} width={diagramWidth} height={diagramHeight}></svg>
     </div>
   );
-}
+};
 
 PredictionsSankey.propTypes = {
-  datasetLabel: PropTypes.string,
+  cellTypes: PropTypes.arrayOf(PropTypes.number),
+  cellTypeNames: PropTypes.arrayOf(PropTypes.string),
+  topGeneIndicesByClass: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number)),
+  genes: PropTypes.arrayOf(PropTypes.string),
 };

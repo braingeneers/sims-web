@@ -317,7 +317,12 @@ function App() {
       {dataset && (
         <Box display="flex" mt={4}>
           <Box width="40%" mr={4}>
-            {/* <PredictionsSankey datasetLabel={dataset.datasetLabel} /> */}
+            <PredictionsSankey
+              cellTypes={dataset.cellTypes}
+              cellTypeNames={dataset.cellTypeNames}
+              topGeneIndicesByClass={dataset.topGeneIndicesByClass}
+              genes={dataset.genes}
+            />
           </Box>
           <Box width="20%" mr={4}>
             <Typography variant="h6">Top Genes</Typography>
