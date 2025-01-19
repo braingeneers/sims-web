@@ -12,7 +12,7 @@
     "preview-debug": "vite preview --debug",
     "serve-dist-python": "python -m http.server 5173 -d dist/",
     "serve-prod-python": "python -m http.server 5173 -d prod/",
-    "deploy": "rsync -avh --delete dist/ rcurrie@hgwdev.gi.ucsc.edu:/usr/local/apache/htdocs-cells/sims/ --dry-run",
+    "deploy": "rsync -avh --delete dist/ rcurrie@hgwdev.gi.ucsc.edu:/usr/local/apache/htdocs-cells/sims/",
     "netron": "netron public/models/default.onnx"
   },
   "dependencies": {
