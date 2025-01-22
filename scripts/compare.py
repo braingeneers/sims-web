@@ -1,0 +1,326 @@
+"""
+Compare SIMS vs. ONNX
+
+SIM().network is a Tabnet:
+https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L101
+
+https://github.com/dreamquark-ai/tabnet/blob/2m0c4ebd2bb1cb639ea94ab4b11823bc49265588/pytorch_tabnet/tab_network.py#L508
+
+TabNet.forward:
+https://github.com/dreamquark-ai/tabnet/blob/2c0c4ebd2bb1cb639ea94ab4b11823bc49265588/pytorch_tabnet/tab_network.py#L614
+
+calls TabNetNoEmbeddings(EmbeddingsGenerator(x))
+
+EmbeddingsGenerator:
+https://github.com/dreamquark-ai/tabnet/blob/2c0c4ebd2bb1cb639ea94ab4b11823bc49265588/pytorch_tabnet/tab_network.py#L809
+
+BUT skip_embeddings = True so its just TabNetNoEmbeddings(x)
+
+TabNetNoEmbeddings:
+https://github.com/dreamquark-ai/tabnet/blob/2c0c4ebd2bb1cb639ea94ab4b11823bc49265588/pytorch_tabnet/tab_network.py#L399
+
+So...its really at its core sims.model.network.tabnet which is:
+TabNetNoEmbeddings.forward
+and
+TabNetNoEmbeddings.forward_masks
+"""
+
+import argparse
+import pandas as pd
+import numpy as np
+import torch
+import torch.onnx
+import anndata
+import onnx
+from onnxruntime import InferenceSession
+from scsims import SIMS
+import sclblonnx as so
+
+
+def print_diffs(msg, a, b, decimals=3):
+    diff = np.round(np.abs(a - b).flatten(), decimals)
+    print(
+        "{} differ by {} values out of {} to {} decimals".format(
+            msg,
+            np.count_nonzero(diff),
+            len(diff),
+            decimals,
+        )
+    )
+
+
+"""
+SIMS runs torch.nn.functional.normalize on the input data before passing it to the model.
+"""
+
+
+# def validate_preprocessing(sm, pm, cm, x):
+#     path = "lpnorm"
+#     _ = so.add_output(pm.graph, path, "FLOAT", x.shape)
+#     p_norm = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=[path])[0]
+#     x_norm = torch.nn.functional.normalize(x, p=2, dim=1).detach().numpy()
+#     print_diffs("norms", p_norm, x_norm, 6)
+
+
+# def validate_embeddings(sm, pm, cm, x):
+#     s_emb = sm.network.embedder(x).detach().numpy()
+
+#     p_enc = so.run(
+#         pm.graph, inputs={"input": x.detach().numpy()}, outputs=["encoding"]
+#     )[0]
+#     print_diffs("encodings", p_enc_0, s_enc_0, 2)
+
+
+# def validate_masks(sm, pm, cm, x):
+#     M_explain, masks = sm.network.forward_masks(x)
+#     path = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
+#     shape_info = onnx.shape_inference.infer_shapes(pm)
+#     for idx, node in enumerate(shape_info.graph.value_info):
+#         if node.name == candidate:
+#             print(idx, node)
+#             break
+#     assert node.name == candidate
+#     model.graph.output.extend([node])
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("checkpoint", type=str, help="Path to a SIMS checkpoint")
+    parser.add_argument(
+        "onnx", type=str, help="Path production ONNX model from checkpoint"
+    )
+    parser.add_argument("sample", type=str, help="Path to h5ad sample")
+    parser.add_argument(
+        "--count", type=int, help="Number of cells to compare (default = all)"
+    )
+    parser.add_argument("--decimals", type=int, default=4, help="# decimals to compare")
+    parser.add_argument("--batch-size", type=int, default=8, help="Batch size")
+    args = parser.parse_args()
+
+    print("Loading SIMS model...")
+    sims = SIMS(
+        weights_path=args.checkpoint,
+        map_location=torch.device("cpu"),
+        weights_only=True,
+    )
+    _ = sims.model.eval()  # Turns off training mode
+
+    """
+    Encoders
+    TabNetNoEmbeddings.forward:
+    https://github.com/dreamquark-ai/tabnet/blob/2c0c4ebd2bb1cb639ea94ab4b11823bc49265588/pytorch_tabnet/tab_network.py#L490
+    """
+
+    # Export an onnx model for just the encoder
+    encoder_path = "data/validation/encoder.onnx"
+    sims.model.network.tabnet.encoder.eval()
+    torch.onnx.export(
+        sims.model.network.tabnet.encoder,
+        torch.zeros(1, len(sims.model.genes)),
+        encoder_path,
+        opset_version=12,  # 12 works in web runtime, later doesn't
+        do_constant_folding=True,  # whether to execute constant folding for optimization
+        export_params=True,
+        training=torch.onnx.TrainingMode.EVAL,
+        input_names=["input"],
+        # output_names=["outputs"],
+        dynamic_axes={"input": {0: "batch_size"}},
+    )
+    session = InferenceSession(encoder_path)
+    # pm = onnx.load(encoder_path)
+    # pm.opset_import[0].version
+
+    # This generates comparable encoding outputs with real data
+    batch = next(
+        enumerate(sims.model._parse_data(args.sample, batch_size=args.batch_size))
+    )
+    x = batch[1].to(torch.float32)
+    np.count_nonzero(x.detach().numpy())
+    np.min(x.detach().numpy())
+    np.max(x.detach().numpy())
+    o_enc = session.run(None, {"input": x.detach().numpy()})
+    s_enc = sims.model.network.tabnet.encoder.forward(x)
+    print_diffs("encodings", o_enc[0], s_enc[0][0].detach().numpy(), 5)
+
+    # This generates less comparable encoding outputs
+    _ = torch.manual_seed(42)
+    x = torch.randn(args.batch_size, len(sims.model.genes))
+    np.count_nonzero(x.detach().numpy())
+    np.min(x.detach().numpy())
+    np.max(x.detach().numpy())
+    o_enc = session.run(None, {"input": x.detach().numpy()})
+    s_enc = sims.model.network.tabnet.encoder.forward(x)
+    print_diffs("encodings", o_enc[0], s_enc[0][0].detach().numpy(), 5)
+
+    # But if we normalize the inputs we get back to comparable outputs
+    x = torch.nn.functional.normalize(x)
+    np.count_nonzero(x.detach().numpy())
+    np.min(x.detach().numpy())
+    np.max(x.detach().numpy())
+    o_enc = session.run(None, {"input": x.detach().numpy()})
+    s_enc = sims.model.network.tabnet.encoder.forward(x)
+    print_diffs("encodings", o_enc[0], s_enc[0][0].detach().numpy(), 5)
+
+    # # Export the model
+    # torch.onnx.export(
+    #     model,  # model being run
+    #     dummy_input,  # model input (or a tuple for multiple inputs)
+    #     "model.onnx",  # where to save the model (can be a file or file-like object)
+    #     export_params=True,  # store the trained parameter weights inside the model file
+    #     opset_version=13,  # the ONNX version to export the model to
+    #     do_constant_folding=True,  # whether to execute constant folding for optimization
+    #     input_names=["input"],  # the model's input names
+    #     output_names=["output"],  # the model's output names
+    #     dynamic_axes={
+    #         "input": {0: "batch_size"},  # variable length axes
+    #         "output": {0: "batch_size"},
+    #     },
+    # )
+
+    # validate_preprocessing(sm, pm, cm, x)
+
+    # # Load count cells from the sample
+    # adata = anndata.read(args.sample)[0 : args.count]
+
+    # # The onnx model has lpnorm normalization built in so we need non-normalized
+    # # and normalized batches from the sample to compare to the raw onnx model
+    # batch_size = adata.shape[0]
+    # batch = next(enumerate(sm._parse_data(args.sample, batch_size, normalize=False)))
+    # x = batch[1].to(torch.float32)
+    # batch_normalized = next(
+    #     enumerate(sm._parse_data(args.sample, batch_size, normalize=True))
+    # )
+    # x_normalized = batch_normalized[1].to(torch.float32)
+
+    # # Compare sims vs. production onnx model predictions
+    # sp = sm.predict(adata)
+    # sp_probs = sp.prob_0.values
+
+    # output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
+    # pm_probs = [p[0] for p in output[0]]
+
+    # print(
+    #     "sims python vs. onnx production {} prob_0 differ by more then {} decimals out of {}".format(
+    #         np.count_nonzero(
+    #             np.round(np.abs(sp_probs - pm_probs), decimals=args.decimals)
+    #         ),
+    #         args.decimals,
+    #         len(pm_probs),
+    #     )
+    # )
+
+    # opset_version = cm.opset_import[0].version if len(cm.opset_import) > 0 else None
+    # print("All ONNX models using opset version ", opset_version)
+
+    # # At this point we have sm, cm, and pm models loaded
+
+    # #
+    # # Compare raw logits
+    # #
+    # sm_logits = sm(x_normalized)[0].detach().numpy()
+    # cm_logits = so.run(
+    #     cm.graph,
+    #     inputs={"input": x_normalized.detach().numpy()},
+    #     outputs=["logits"],
+    # )[0]
+    # pm_logits = so.run(
+    #     pm.graph,
+    #     inputs={"input": x.detach().numpy()},
+    #     outputs=["logits"],
+    # )[0]
+    # print(
+    #     "cm vs. pm {} logits differ by more then {} decimals out of {}".format(
+    #         np.count_nonzero(
+    #             np.round(np.abs(cm_logits - pm_logits), decimals=args.decimals)
+    #         ),
+    #         args.decimals,
+    #         pm_logits.shape[0] * pm_logits.shape[1],
+    #     )
+    # )
+    # print(
+    #     "sm vs. cm {} logits differ by more then {} decimals out of {}".format(
+    #         np.count_nonzero(
+    #             np.round(np.abs(sm_logits - cm_logits), decimals=args.decimals)
+    #         ),
+    #         args.decimals,
+    #         cm_logits.shape[0] * cm_logits.shape[1],
+    #     )
+    # )
+    # print(
+    #     "sm vs. pm {} logits differ by more then {} decimals out of {}".format(
+    #         np.count_nonzero(
+    #             np.round(np.abs(sm_logits - pm_logits), decimals=args.decimals)
+    #         ),
+    #         args.decimals,
+    #         pm_logits.shape[0] * pm_logits.shape[1],
+    #     )
+    # )
+
+    # # assert np.allclose(sm_logits[0], cm_logits[0], rtol=0.001, atol=0.0)
+    # # assert np.allclose(sm_logits, cm_logits, rtol=0.1, atol=0.0, )
+
+    # # try:
+    # #     # Make sure cell id's and order match
+    # #     # Unfortunately the location of the cell ids in h5ad varies...
+    # #     # assert adata.obs.index.equals(web_predictions.index)
+    # #     # Make sure predictions and probabilites are close
+    # #     assert np.all(py_predictions.pred_0.values == web_predictions.pred_0.values)
+    # #     assert np.all(py_predictions.pred_1.values == web_predictions.pred_1.values)
+    # #     assert np.all(py_predictions.pred_2.values == web_predictions.pred_2.values)
+    # #     assert np.allclose(
+    # #         py_predictions.prob_0.values,
+    # #         web_predictions.prob_0.values,
+    # #         atol=args.tolerance,
+    # #     )
+    # #     assert np.allclose(
+    # #         py_predictions.prob_1.values,
+    # #         web_predictions.prob_1.values,
+    # #         atol=args.tolerance,
+    # #     )
+    # #     assert np.allclose(
+    # #         py_predictions.prob_2.values,
+    # #         web_predictions.prob_2.values,
+    # #         atol=args.tolerance,
+    # #     )
+    # # except AssertionError as e:
+    # #     print(e)
+    # #     print("Predictions do not match")
+
+    # # # Create a single random input
+    # # _ = torch.manual_seed(42)
+    # # x = torch.randn(1, len(sims.model.genes))
+
+    # # # Encoder
+    # # pm = sims.model.network.tabnet.encoder
+    # # pm.eval()
+    # # torch.onnx.export(
+    # #     pm,
+    # #     torch.zeros(1, len(sims.model.genes)),
+    # #     raw_model_path,
+    # #     training=torch.onnx.TrainingMode.EVAL,
+    # #     input_names=["input"],
+    # #     output_names=["y0", "y1", "y2", "y3"],
+    # #     export_params=True,
+    # #     opset_version=pm_opset_version,
+    # # )
+
+    # # om = onnx.load(raw_model_path)
+    # # so.list_inputs(om.graph)
+    # # so.list_outputs(om.graph)
+
+    # # pm.eval()  # Set to evaluation mode
+    # # with torch.no_grad():  # Disable gradient calculation
+    # #     py = pm.forward(x)
+
+    # # oy = so.run(
+    # #     om.graph,
+    # #     inputs={"input": x.detach().numpy()},
+    # #     outputs=["y0", "y1", "y2", "y3"],
+    # # )
+
+    # # oy[0][0][0:4]
+
+    # # py[1][0][0].detach().numpy()[0:4]
+
+    # # py[0][1][0].detach().numpy()[0:4]
+    # # py[0][2][0].detach().numpy()[0:4]
