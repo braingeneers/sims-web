@@ -180,198 +180,40 @@ if __name__ == "__main__":
     print_diffs("norms", p_norm, x_norm, args.decimals)
 
     """
-    Full predictions
+    Full probability predictions end to end
     """
-    sims_predictions = sims.predict(args.sample, rows=[0])
+    num_samples = 10
+    sims_predictions = sims.predict(args.sample, rows=list(range(num_samples)))
+
     # The onnx model has lpnorm normalization built in so we need non-normalized
-    batch = next(enumerate(sims.model._parse_data(args.sample, args.batch_size, normalize=False)))
+    batch = next(
+        enumerate(sims.model._parse_data(args.sample, num_samples, normalize=False))
+    )
     session = InferenceSession(args.onnx)
-    onnx_predictions = session.run(["probs"], {"input": batch[1].to(torch.float32).detach().numpy()})
 
-    # sims_predictions[["prob_0", "prob_1", "prob_0"]].values
-    # onnx_predictions[0][0]
+    # Do one at a time - see above
+    for i in range(num_samples):
+        onnx_predictions = session.run(
+            ["probs"], {"input": batch[1][i : i + 1].to(torch.float32).detach().numpy()}
+        )
+        # print(onnx_predictions[0][0])
+        # print(sims_predictions.values[i][3:6])
+        print_diffs(
+            f"sample {i} probs",
+            onnx_predictions[0][0],
+            sims_predictions.values[i][3:6].astype(np.float32),
+            3,
+        )
 
-    print_diffs("predictions", sims_predictions[["prob_0", "prob_1", "prob_0"]].values, onnx_predictions[0][0], args.decimals)
-
-
-# # Compare sims vs. production onnx model predictions
-# sp = sm.predict(adata)
-# sp_probs = sp.prob_0.values
-
-# output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
-# pm_probs = [p[0] for p in output[0]]
-# x = batch[1].to(torch.float32)
-
-
-# def validate_masks(sm, pm, cm, x):
-#     M_explain, masks = sm.network.forward_masks(x)
-#     path = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
-#     shape_info = onnx.shape_inference.infer_shapes(pm)
-#     for idx, node in enumerate(shape_info.graph.value_info):
-#         if node.name == candidate:
-#             print(idx, node)
-#             break
-#     assert node.name == candidate
-#     model.graph.output.extend([node])
-
-
-# # Export the model
-# torch.onnx.export(
-#     model,  # model being run
-#     dummy_input,  # model input (or a tuple for multiple inputs)
-#     "model.onnx",  # where to save the model (can be a file or file-like object)
-#     export_params=True,  # store the trained parameter weights inside the model file
-#     opset_version=13,  # the ONNX version to export the model to
-#     do_constant_folding=True,  # whether to execute constant folding for optimization
-#     input_names=["input"],  # the model's input names
-#     output_names=["output"],  # the model's output names
-#     dynamic_axes={
-#         "input": {0: "batch_size"},  # variable length axes
-#         "output": {0: "batch_size"},
-#     },
-# )
-
-# validate_preprocessing(sm, pm, cm, x)
-
-# # Load count cells from the sample
-# adata = anndata.read(args.sample)[0 : args.count]
-
-# # The onnx model has lpnorm normalization built in so we need non-normalized
-# # and normalized batches from the sample to compare to the raw onnx model
-# batch_size = adata.shape[0]
-# batch = next(enumerate(sm._parse_data(args.sample, batch_size, normalize=False)))
-# x = batch[1].to(torch.float32)
-# batch_normalized = next(
-#     enumerate(sm._parse_data(args.sample, batch_size, normalize=True))
-# )
-# x_normalized = batch_normalized[1].to(torch.float32)
-
-# # Compare sims vs. production onnx model predictions
-# sp = sm.predict(adata)
-# sp_probs = sp.prob_0.values
-
-# output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
-# pm_probs = [p[0] for p in output[0]]
-
-# print(
-#     "sims python vs. onnx production {} prob_0 differ by more then {} decimals out of {}".format(
-#         np.count_nonzero(
-#             np.round(np.abs(sp_probs - pm_probs), decimals=args.decimals)
-#         ),
-#         args.decimals,
-#         len(pm_probs),
-#     )
-# )
-
-# opset_version = cm.opset_import[0].version if len(cm.opset_import) > 0 else None
-# print("All ONNX models using opset version ", opset_version)
-
-# # At this point we have sm, cm, and pm models loaded
-
-# #
-# # Compare raw logits
-# #
-# sm_logits = sm(x_normalized)[0].detach().numpy()
-# cm_logits = so.run(
-#     cm.graph,
-#     inputs={"input": x_normalized.detach().numpy()},
-#     outputs=["logits"],
-# )[0]
-# pm_logits = so.run(
-#     pm.graph,
-#     inputs={"input": x.detach().numpy()},
-#     outputs=["logits"],
-# )[0]
-# print(
-#     "cm vs. pm {} logits differ by more then {} decimals out of {}".format(
-#         np.count_nonzero(
-#             np.round(np.abs(cm_logits - pm_logits), decimals=args.decimals)
-#         ),
-#         args.decimals,
-#         pm_logits.shape[0] * pm_logits.shape[1],
-#     )
-# )
-# print(
-#     "sm vs. cm {} logits differ by more then {} decimals out of {}".format(
-#         np.count_nonzero(
-#             np.round(np.abs(sm_logits - cm_logits), decimals=args.decimals)
-#         ),
-#         args.decimals,
-#         cm_logits.shape[0] * cm_logits.shape[1],
-#     )
-# )
-# print(
-#     "sm vs. pm {} logits differ by more then {} decimals out of {}".format(
-#         np.count_nonzero(
-#             np.round(np.abs(sm_logits - pm_logits), decimals=args.decimals)
-#         ),
-#         args.decimals,
-#         pm_logits.shape[0] * pm_logits.shape[1],
-#     )
-# )
-
-# # assert np.allclose(sm_logits[0], cm_logits[0], rtol=0.001, atol=0.0)
-# # assert np.allclose(sm_logits, cm_logits, rtol=0.1, atol=0.0, )
-
-# # try:
-# #     # Make sure cell id's and order match
-# #     # Unfortunately the location of the cell ids in h5ad varies...
-# #     # assert adata.obs.index.equals(web_predictions.index)
-# #     # Make sure predictions and probabilites are close
-# #     assert np.all(py_predictions.pred_0.values == web_predictions.pred_0.values)
-# #     assert np.all(py_predictions.pred_1.values == web_predictions.pred_1.values)
-# #     assert np.all(py_predictions.pred_2.values == web_predictions.pred_2.values)
-# #     assert np.allclose(
-# #         py_predictions.prob_0.values,
-# #         web_predictions.prob_0.values,
-# #         atol=args.tolerance,
-# #     )
-# #     assert np.allclose(
-# #         py_predictions.prob_1.values,
-# #         web_predictions.prob_1.values,
-# #         atol=args.tolerance,
-# #     )
-# #     assert np.allclose(
-# #         py_predictions.prob_2.values,
-# #         web_predictions.prob_2.values,
-# #         atol=args.tolerance,
-# #     )
-# # except AssertionError as e:
-# #     print(e)
-# #     print("Predictions do not match")
-
-
-# # # Encoder
-# # pm = sims.model.network.tabnet.encoder
-# # pm.eval()
-# # torch.onnx.export(
-# #     pm,
-# #     torch.zeros(1, len(sims.model.genes)),
-# #     raw_model_path,
-# #     training=torch.onnx.TrainingMode.EVAL,
-# #     input_names=["input"],
-# #     output_names=["y0", "y1", "y2", "y3"],
-# #     export_params=True,
-# #     opset_version=pm_opset_version,
-# # )
-
-# # om = onnx.load(raw_model_path)
-# # so.list_inputs(om.graph)
-# # so.list_outputs(om.graph)
-
-# # pm.eval()  # Set to evaluation mode
-# # with torch.no_grad():  # Disable gradient calculation
-# #     py = pm.forward(x)
-
-# # oy = so.run(
-# #     om.graph,
-# #     inputs={"input": x.detach().numpy()},
-# #     outputs=["y0", "y1", "y2", "y3"],
-# # )
-
-# # oy[0][0][0:4]
-
-# # py[1][0][0].detach().numpy()[0:4]
-
-# # py[0][1][0].detach().numpy()[0:4]
-# # py[0][2][0].detach().numpy()[0:4]
+    """
+    Masks/Explanations
+    """
+    # M_explain, masks = sm.network.forward_masks(x)
+    # path = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
+    # shape_info = onnx.shape_inference.infer_shapes(pm)
+    # for idx, node in enumerate(shape_info.graph.value_info):
+    #     if node.name == candidate:
+    #         print(idx, node)
+    #         break
+    # assert node.name == candidate
+    # model.graph.output.extend([node])
