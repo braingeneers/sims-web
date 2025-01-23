@@ -62,13 +62,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
     args = parser.parse_args()
 
+    if args.batch_size != 1:
+        print(
+            "\033[92m WARNING: Batch size > 1 generates output incosisent with SIMS/PyTorch \033[0m"
+        )
+
     print("Loading SIMS model...")
     sims = SIMS(
         weights_path=args.checkpoint,
         map_location=torch.device("cpu"),
         weights_only=True,
     )
-    _ = sims.model.eval()  # Turns off training mode
+    _ = sims.model.eva()  # Turns off training mode
 
     # Normalized random input for the encoder to better approximate real data
     _ = torch.manual_seed(42)
@@ -146,7 +151,7 @@ if __name__ == "__main__":
     logits_path = "data/validation/logits.onnx"
     sims.model.network.eval()
     torch.onnx.export(
-        sims.model.network,
+        sims.model.network.tabnet,
         torch.zeros(1, len(sims.model.genes)),
         logits_path,
         opset_version=12,  # 12 works in web runtime, later doesn't
@@ -207,13 +212,50 @@ if __name__ == "__main__":
 
     """
     Masks/Explanations
+    https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
+
+    Calls self.network.forward_masks(X)
+
+    NOTE: We're trying to get close to these but only using the forward inference model
     """
-    # M_explain, masks = sm.network.forward_masks(x)
-    # path = "/network/tabnet/encoder/att_transformers.0/selector/Clip_output_0"
-    # shape_info = onnx.shape_inference.infer_shapes(pm)
-    # for idx, node in enumerate(shape_info.graph.value_info):
-    #     if node.name == candidate:
-    #         print(idx, node)
-    #         break
-    # assert node.name == candidate
-    # model.graph.output.extend([node])
+    M_explain, masks = sims.model.network.forward_masks(x)
+
+    masks_path = "data/validation/masks.onnx"
+    sims.model.network.eval()
+    torch.onnx.export(
+        sims.model.network.tabnet,
+        torch.zeros(1, len(sims.model.genes)),
+        masks_path,
+        opset_version=12,  # 12 works in web runtime, later doesn't
+        do_constant_folding=True,
+        export_params=True,
+        training=torch.onnx.TrainingMode.EVAL,
+        input_names=["input"],
+        # dynamic_axes={"input": {0: "batch_size"}},
+    )
+    onnx_model = onnx.load(masks_path)
+
+    paths = [
+        "/encoder/att_transformers.0/selector/Clip_output_0",
+        "/encoder/att_transformers.1/selector/Clip_output_0",
+        "/encoder/att_transformers.2/selector/Clip_output_0",
+    ]
+    for path in paths:
+        shape_info = onnx.shape_inference.infer_shapes(onnx_model)
+        for idx, node in enumerate(shape_info.graph.value_info):
+            if node.name == path:
+                print(idx, node)
+                break
+        assert node.name == path
+        onnx_model.graph.output.extend([node])
+    output = so.run(
+        onnx_model.graph, inputs={"input": x.detach().numpy()}, outputs=paths
+    )
+
+    for i, path in enumerate(paths):
+        print_diffs(
+            f"mask {i}",
+            masks[i][0].detach().numpy(),
+            output[i][0],
+            args.decimals,
+        )

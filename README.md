@@ -31,16 +31,16 @@ Export a SIMS checkpoint to an ONNX file and list of genes:
 python scripts/sims-to-onnx.py checkpoints/default.ckpt public/models/
 ```
 
-Check a model for compatibility with ONNX:
+Validate the output of SIMS to ONNX using the python runtime:
+
+```
+python scripts/validate.py checkpoints/default.ckpt public/models/default.onnx public/sample.h5ad
+```
+
+Check a model for compatibility with various ONNX runtimes:
 
 ```
 python -m onnxruntime.tools.check_onnx_model_mobile_usability public/models/default.onnx
-```
-
-Compare the output of SIMS to ONNX using the python runtime:
-
-```
-python scripts/validate.py checkpoints/default.ckpt public/models/default.onnx public/sample.h5ad --decimals 2
 ```
 
 Serve the web app and exported models locally with auto-reload courtesy of vite:
