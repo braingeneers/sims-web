@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "onnx", type=str, help="Path production ONNX model from checkpoint"
     )
+    parser.add_argument("sample", type=str, help="Path to a sample h5ad file")
     parser.add_argument("--decimals", type=int, default=5, help="# decimals to compare")
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
     args = parser.parse_args()
@@ -71,14 +72,8 @@ if __name__ == "__main__":
 
     # Normalized random input for the encoder to better approximate real data
     _ = torch.manual_seed(42)
-    x = torch.randn(args.batch_size, len(sims.model.genes))
-    x = torch.nn.functional.normalize(x)
-
-    # # This generates comparable encoding outputs with real data from an h5ad file
-    # batch = next(
-    #     enumerate(sims.model._parse_data("public/sample.h5ad", batch_size=args.batch_size))
-    # )
-    # x = batch[1].to(torch.float32)
+    x_un_normalized = torch.randn(args.batch_size, len(sims.model.genes))
+    x = torch.nn.functional.normalize(x_un_normalized)
 
     """
     Encoders
@@ -183,6 +178,29 @@ if __name__ == "__main__":
     )[0]
     x_norm = torch.nn.functional.normalize(x, p=2, dim=1).detach().numpy()
     print_diffs("norms", p_norm, x_norm, args.decimals)
+
+    """
+    Full predictions
+    """
+    sims_predictions = sims.predict(args.sample, rows=[0])
+    # The onnx model has lpnorm normalization built in so we need non-normalized
+    batch = next(enumerate(sims.model._parse_data(args.sample, args.batch_size, normalize=False)))
+    session = InferenceSession(args.onnx)
+    onnx_predictions = session.run(["probs"], {"input": batch[1].to(torch.float32).detach().numpy()})
+
+    # sims_predictions[["prob_0", "prob_1", "prob_0"]].values
+    # onnx_predictions[0][0]
+
+    print_diffs("predictions", sims_predictions[["prob_0", "prob_1", "prob_0"]].values, onnx_predictions[0][0], args.decimals)
+
+
+# # Compare sims vs. production onnx model predictions
+# sp = sm.predict(adata)
+# sp_probs = sp.prob_0.values
+
+# output = so.run(pm.graph, inputs={"input": x.detach().numpy()}, outputs=["probs"])
+# pm_probs = [p[0] for p in output[0]]
+# x = batch[1].to(torch.float32)
 
 
 # def validate_masks(sm, pm, cm, x):
