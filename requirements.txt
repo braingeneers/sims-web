@@ -12,3 +12,6 @@ onnxsim
 netron
 
 ipython
+
+selenium
+chromedriver-binary

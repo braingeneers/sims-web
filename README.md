@@ -18,6 +18,8 @@ The front end a single page React web app using Material UI and Vite with no bac
 
 # Developing
 
+NOTE: SIMS install from git on a Mac works with Python 3.10, other versions not so much...
+
 Install dependencies for the python model exporting and webapp:
 
 ```

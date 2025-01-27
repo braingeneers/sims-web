@@ -269,3 +269,11 @@ if __name__ == "__main__":
         f"{model_path}/{model_id}.onnx",
         onnx_opset_version=args.opset_version,
     )
+
+    # Count the total number of parameters in the model
+    total_params = 0
+    for init in model.graph.initializer:
+        # init.dims is a list of tensor dimensions
+        tensor_size = np.prod(init.dims)
+        total_params += tensor_size
+    print("Total number of parameters in the onnx model:", total_params)

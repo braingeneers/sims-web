@@ -59,12 +59,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("sample", type=str, help="Path to a sample h5ad file")
     parser.add_argument("--decimals", type=int, default=5, help="# decimals to compare")
-    parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
+    parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
     args = parser.parse_args()
 
     if args.batch_size != 1:
         print(
-            "\033[92m WARNING: Batch size > 1 generates output incosisent with SIMS/PyTorch \033[0m"
+            "\033[92m WARNING: Batch size > 1 generates output inconsistent with SIMS/PyTorch \033[0m"
         )
 
     print("Loading SIMS model...")
@@ -73,12 +73,30 @@ if __name__ == "__main__":
         map_location=torch.device("cpu"),
         weights_only=True,
     )
-    _ = sims.model.eva()  # Turns off training mode
+    _ = sims.model.eval()  # Turns off training mode
 
-    # Normalized random input for the encoder to better approximate real data
+    # The onnx model runs lpnorm so we need non-normalized to compare end to end
+    batch_un_normalized = next(
+        enumerate(
+            sims.model._parse_data(
+                args.sample, batch_size=args.batch_size, normalize=False
+            )
+        )
+    )[1].to(torch.float32)
+    batch = next(
+        enumerate(
+            sims.model._parse_data(
+                args.sample, batch_size=args.batch_size, normalize=True
+            )
+        )
+    )[1].to(torch.float32)
+    # Verify understanding of what the data loader is doing
+    assert np.allclose(batch[0], torch.nn.functional.normalize(batch_un_normalized[0], dim=0))
+
+    # Normalized random input 
     _ = torch.manual_seed(42)
     x_un_normalized = torch.randn(args.batch_size, len(sims.model.genes))
-    x = torch.nn.functional.normalize(x_un_normalized)
+    x = torch.nn.functional.normalize(x_un_normalized, dim=0)
 
     """
     Encoders
@@ -91,13 +109,14 @@ if __name__ == "__main__":
         torch.zeros(1, len(sims.model.genes)),
         encoder_path,
         opset_version=12,  # 12 works in web runtime, later doesn't
-        do_constant_folding=True,
+        # do_constant_folding=True,
         export_params=True,
         training=torch.onnx.TrainingMode.EVAL,
         input_names=["input"],
-        dynamic_axes={"input": {0: "batch_size"}},
+        # dynamic_axes={"input": {0: "batch_size"}},
     )
     session = InferenceSession(encoder_path)
+
     steps_output_onnx = session.run(None, {"input": x.detach().numpy()})
     steps_output_py, _ = sims.model.network.tabnet.encoder.forward(x)
     print_diffs(
@@ -108,16 +127,42 @@ if __name__ == "__main__":
     )
     print_diffs(
         "first encoder",
-        steps_output_py[0].detach().numpy(),
-        steps_output_onnx[0],
+        steps_output_py[1].detach().numpy(),
+        steps_output_onnx[1],
         args.decimals,
     )
     print_diffs(
         "first encoder",
-        steps_output_py[0].detach().numpy(),
-        steps_output_onnx[0],
+        steps_output_py[2].detach().numpy(),
+        steps_output_onnx[2],
         args.decimals,
     )
+
+    # _ = torch.manual_seed(42)
+    x_un_normalized = torch.randn(args.batch_size, len(sims.model.genes))
+    x = torch.nn.functional.normalize(x_un_normalized, dim=0)
+    for i in range(args.batch_size):
+        steps_output_onnx = session.run(None, {"input": x[i : i + 1].detach().numpy()})
+        steps_output_py, _ = sims.model.network.tabnet.encoder.forward(x[i : i + 1])
+        for j in range(len(steps_output_py)):
+            print_diffs(
+                f"sample {i} encoder {j}",
+                steps_output_py[j].detach().numpy(),
+                steps_output_onnx[j],
+                args.decimals,
+            )
+
+
+    for i in range(args.batch_size):
+        steps_output_onnx = session.run(None, {"input": batch[i : i + 1].detach().numpy()})
+        steps_output_py, _ = sims.model.network.tabnet.encoder.forward(batch[i : i + 1])
+        for j in range(len(steps_output_py)):
+            print_diffs(
+                f"sample {i} encoder {j}",
+                steps_output_py[j].detach().numpy(),
+                steps_output_onnx[j],
+                args.decimals,
+            )
 
     """
     FinalMappings 
@@ -172,6 +217,16 @@ if __name__ == "__main__":
             args.decimals,
         )
 
+    # Compare the full sample's logits to onnx
+    for i in range(batch.shape[0]):
+        logits_py = sims.model.network.forward(batch[i : i + 1].to(torch.float32))
+        logits_onnx = session.run(
+            None, {"input": batch[i : i + 1].to(torch.float32).detach().numpy()}
+        )
+        print_diffs(
+            f"logits sample {i}", logits_py[0][0].detach().numpy(), logits_onnx[0][0], 2
+        )
+
     """
     SIMS runs torch.nn.functional.normalize on the input data before passing it to the model.
     """
@@ -187,7 +242,7 @@ if __name__ == "__main__":
     """
     Full probability predictions end to end
     """
-    num_samples = 10
+    num_samples = 100
     sims_predictions = sims.predict(args.sample, rows=list(range(num_samples)))
 
     # The onnx model has lpnorm normalization built in so we need non-normalized
@@ -211,12 +266,29 @@ if __name__ == "__main__":
         )
 
     """
-    Masks/Explanations
+    Compare downloaded csv from web app to predictions for this sample from SIMS
+    """
+    onnx_web_predictions = pd.read_csv("data/validation/predictions-no-batch.csv")
+    sims_predictions = sims.predict(args.sample)
+
+    print_diffs(
+        "onnx web vs. sims",
+        onnx_web_predictions.prob_0.values,
+        sims_predictions.prob_0.values,
+        3,
+    )
+    print_diffs(
+        "onnx web vs. sims",
+        onnx_web_predictions.prob_1.values,
+        sims_predictions.prob_1.values,
+        3,
+    )
+
+    """
+    Masks
     https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
 
     Calls self.network.forward_masks(X)
-
-    NOTE: We're trying to get close to these but only using the forward inference model
     """
     M_explain, masks = sims.model.network.forward_masks(x)
 
@@ -244,18 +316,57 @@ if __name__ == "__main__":
         shape_info = onnx.shape_inference.infer_shapes(onnx_model)
         for idx, node in enumerate(shape_info.graph.value_info):
             if node.name == path:
-                print(idx, node)
+                # print(idx, node)
                 break
         assert node.name == path
         onnx_model.graph.output.extend([node])
-    output = so.run(
+
+    onnx_masks = so.run(
         onnx_model.graph, inputs={"input": x.detach().numpy()}, outputs=paths
     )
-
     for i, path in enumerate(paths):
         print_diffs(
             f"mask {i}",
             masks[i][0].detach().numpy(),
-            output[i][0],
+            onnx_masks[i][0],
             args.decimals,
         )
+        print(
+            "# non zero values in the mask:",
+            np.count_nonzero(masks[i][0].detach().numpy()),
+        )
+
+    """
+    Explain
+    https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
+    """
+    # M_explain, masks = sims.explain(args.sample, batch_size=args.batch_size, rows=[0])
+
+    # np.count_nonzero(M_explain[0])
+
+    # onnx_masks = so.run(
+    #     onnx_model.graph,
+    #     inputs={"input": batch[1][0:1].to(torch.float32).detach().numpy()},
+    #     outputs=paths,
+    # )
+    # np.count_nonzero(onnx_masks[0])
+    # np.count_nonzero(onnx_masks[1])
+    # np.count_nonzero(onnx_masks[2])
+
+    # # onnx_explain = np.sum(onnx_masks, axis=0)
+    # onnx_explain = onnx_masks[0][0] * onnx_masks[1][0] * onnx_masks[2][0]
+    # print(
+    #     "# non zero values in onnx_explain",
+    #     np.count_nonzero(onnx_explain[0]),
+    # )
+    # print_diffs("explain", M_explain[0].detach().numpy(), onnx_explain[0], 2)
+
+    """
+    WebRuntime vs. Python
+    """
+    # from selenium import webdriver
+    # import chromedriver_binary  # Adds chromedriver binary to path
+
+    # driver = webdriver.Chrome()
+    # driver.get("http://localhost:5173")
+    # assert "Python" in driver.title

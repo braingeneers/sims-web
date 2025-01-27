@@ -13,7 +13,8 @@
     "serve-dist-python": "python -m http.server 5173 -d dist/",
     "serve-prod-python": "python -m http.server 5173 -d prod/",
     "deploy": "rsync -avh --delete dist/ rcurrie@hgwdev.gi.ucsc.edu:/usr/local/apache/htdocs-cells/sims/",
-    "netron": "netron public/models/default.onnx"
+    "netron": "netron public/models/default.onnx",
+    "update-chrome-driver": "pip install --upgrade --force-reinstall chromedriver-binary-auto"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
