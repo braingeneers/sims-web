@@ -3,6 +3,7 @@
 /checkpoints
 /sims_checkpoints
 /wandb
+/lightning_logs
 
 .DS_Store
 
