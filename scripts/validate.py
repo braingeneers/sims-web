@@ -164,6 +164,31 @@ if __name__ == "__main__":
     print_diffs("mappings", out_py.detach().numpy(), out_onnx, args.decimals)
 
     """
+    Logits from full core TabNet
+    """
+    model = sims.model.network
+    _ = model.eval()
+    session = export_onnx(
+        model,
+        "data/validation/logits.onnx",
+        len(sims.model.genes),
+        args.batch_size,
+    )
+
+    for i in range(args.batch_size):
+        logits_onnx = session.run(None, {"input": x[i : i + 1].detach().numpy()})
+        logits_py = sims.model.network.forward(x[i : i + 1])
+        print(
+            "Is Close:",
+            np.allclose(
+                logits_py[0][0].detach().numpy(),
+                logits_onnx[0][0],
+                rtol=1e-3,
+                atol=1e-4,
+            ),
+        )
+
+    """
     Save for future full validation 
     """
 
@@ -221,43 +246,6 @@ if __name__ == "__main__":
     #             steps_output_onnx[j],
     #             args.decimals,
     #         )
-
-    # """
-    # Logits from full core TabNet
-    # """
-    # logits_path = "data/validation/logits.onnx"
-    # sims.model.network.eval()
-    # torch.onnx.export(
-    #     sims.model.network.tabnet,
-    #     torch.zeros(1, len(sims.model.genes)),
-    #     logits_path,
-    #     opset_version=12,  # 12 works in web runtime, later doesn't
-    #     do_constant_folding=True,
-    #     export_params=True,
-    #     training=torch.onnx.TrainingMode.EVAL,
-    #     input_names=["input"],
-    #     dynamic_axes={"input": {0: "batch_size"}},
-    # )
-    # session = InferenceSession(logits_path)
-    # logits_onnx = session.run(None, {"input": x.detach().numpy()})
-    # logits_py = sims.model.network.forward(x)
-    # for i in range(args.batch_size):
-    #     print_diffs(
-    #         f"logits sample {i}",
-    #         logits_py[0][i].detach().numpy(),
-    #         logits_onnx[0][i],
-    #         args.decimals,
-    #     )
-
-    # # Compare the full sample's logits to onnx
-    # for i in range(batch.shape[0]):
-    #     logits_py = sims.model.network.forward(batch[i : i + 1].to(torch.float32))
-    #     logits_onnx = session.run(
-    #         None, {"input": batch[i : i + 1].to(torch.float32).detach().numpy()}
-    #     )
-    #     print_diffs(
-    #         f"logits sample {i}", logits_py[0][0].detach().numpy(), logits_onnx[0][0], 2
-    #     )
 
     # """
     # SIMS runs torch.nn.functional.normalize on the input data before passing it to the model.
