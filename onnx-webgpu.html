@@ -19,14 +19,14 @@
             // create a new session and load the specific model.
             // const session = await ort.InferenceSession.create('data/sims.onnx');
             // Fails with e = 42912032??? Maybe model isn't compatible with webgpu?
-            let options = { executionProviders: ['webgpu'] }
+            let options = { executionProviders: ['cpu'] }
             ort.env.debug = true;
             ort.env.logLevel = 'verbose';
             ort.env.trace = true;
             options['logSeverityLevel'] = 0;
             options['logVerbosityLevel'] = 0;
             const session = await ort.InferenceSession.create(
-                'http://localhost:3000/models/default.onnx', options);
+                'http://localhost:3000/public/models/default.onnx', options);
 
             // Works: From https://github.com/akbartus/DepthAnything-on-Browser/blob/main/interactive-v2/webgpu-sliders.html
             // const myOrtSession = await ort.InferenceSession.create("https://cdn.glitch.me/0f5359e2-6022-421b-88f7-13e276d0fb33/depthanythingv2-vits-dynamic-quant.onnx", { executionProviders: ['webgpu'] });
@@ -41,7 +41,7 @@
             }
 
             // feed inputs and run
-            const results = await session.run({ "input.1": X });
+            const results = await session.run({ "input": X });
             console.log('inference done');
             console.log(results);
             document.write(`<div>Cell 0 Predictions: ${results["826"].cpuData.slice(0, 8)}</div>`);

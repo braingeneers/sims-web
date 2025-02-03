@@ -254,42 +254,41 @@ if __name__ == "__main__":
         ),
     )
 
-    # """
-    # Masks
-    # https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
+    """
+    Masks
+    https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
 
-    # Calls self.network.forward_masks(X)
-    # """
-    # M_explain, masks = sims.model.network.forward_masks(x)
+    Calls self.network.forward_masks(X)
+    """
+    M_explain, masks = sims.model.network.forward_masks(x)
 
-    # masks_path = "data/validation/masks.onnx"
-    # sims.model.network.eval()
-    # torch.onnx.export(
-    #     sims.model.network.tabnet,
-    #     torch.zeros(1, len(sims.model.genes)),
-    #     masks_path,
-    #     opset_version=12,  # 12 works in web runtime, later doesn't
-    #     do_constant_folding=True,
-    #     export_params=True,
-    #     training=torch.onnx.TrainingMode.EVAL,
-    #     input_names=["input"],
-    #     # dynamic_axes={"input": {0: "batch_size"}},
-    # )
-    # onnx_model = onnx.load(masks_path)
+    model = sims.model.network
+    _ = model.eval()
+    onnx_model = torch.onnx.export(
+        model,
+        torch.zeros(1, len(sims.model.genes)),
+        dynamo=True,
+    )
+    onnx_model.optimize()
+    onnx_model.save("data/validation/masks.onnx")
+    session = ort.InferenceSession("data/validation/masks.onnx")
 
-    # paths = [
-    #     "/encoder/att_transformers.0/selector/Clip_output_0",
-    #     "/encoder/att_transformers.1/selector/Clip_output_0",
-    #     "/encoder/att_transformers.2/selector/Clip_output_0",
-    # ]
-    # for path in paths:
-    #     shape_info = onnx.shape_inference.infer_shapes(onnx_model)
-    #     for idx, node in enumerate(shape_info.graph.value_info):
-    #         if node.name == path:
-    #             # print(idx, node)
-    #             break
-    #     assert node.name == path
-    #     onnx_model.graph.output.extend([node])
+    onnx_model = onnx.load("data/validation/masks.onnx")
+
+    paths = [
+        "/encoder/att_transformers.0/selector/Clip_output_0",
+        "/encoder/att_transformers.1/selector/Clip_output_0",
+        "/encoder/att_transformers.2/selector/Clip_output_0",
+    ]
+    for path in paths:
+        shape_info = onnx.shape_inference.infer_shapes(onnx_model)
+        for idx, node in enumerate(shape_info.graph.value_info):
+            if node.name == path:
+                print(idx, node)
+                break
+        assert node.name == path
+
+        onnx_model.graph.output.extend([node])
 
     # onnx_masks = so.run(
     #     onnx_model.graph, inputs={"input": x.detach().numpy()}, outputs=paths
