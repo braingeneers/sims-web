@@ -1,6 +1,8 @@
 /venv   
 /data
 /checkpoints
+/sims_checkpoints
+/wandb
 
 .DS_Store
 

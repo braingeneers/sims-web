@@ -1,12 +1,21 @@
-scanpy
+torch==2.6.0
+pytorch_tabnet==4.1.0
+pytorch-lightning==2.5.0.post0
+torchvision
+
 
 git+https://github.com/braingeneers/SIMS.git
 
 onnx
+onnxscript
 onnxruntime
+
+
+scanpy
+
+
 sclblonnx
 
-onnxscript
 onnxsim
 
 netron
