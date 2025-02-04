@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>onnx cpu sample</title>
+</head>
+
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.1/ort.webgpu.min.js"
+        integrity="sha512-VfhX+QkN7NbCrYehivVRUqfUdswaFcRPtmyBSMGIXGbIMRku82aqFB2mKxvrtNV9TYP6JWz371CfTIzAExMyCA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <h1>onnx cpu</h1>
+</body>
+<script type="module">
+    async function main() {
+        try {
+            // Create an onnx runtime session from an onnx file at a url
+            console.log("Loading onnx file and creating session...");
+            let options = { executionProviders: ['cpu'] }
+            // Turn on all the debugging and tracing - see the web console for output
+            ort.env.debug = true;
+            ort.env.logLevel = 'verbose';
+            ort.env.trace = true;
+            options['logSeverityLevel'] = 0;
+            options['logVerbosityLevel'] = 0;
+            // Change the URL here to point to whatever onnx file you want to load
+            const session = await ort.InferenceSession.create(
+                'http://localhost:3000/public/models/default.onnx', options);
+            console.log('Model loaded');
+
+            // Create a tensor/sample to pass into the session
+            const batch_size = 1;
+            const X = new ort.Tensor('float32', new Float32Array(batch_size * 33694), [batch_size, 33694]);
+            for (let i = 0; i < 100; i++) {
+                X.data[i] = 0.5;
+            }
+
+            // Run the sample through the session
+            const results = await session.run({ "input": X });
+            console.log('Inference results:', results);
+            document.write("<h2>Worked! See console for results</h2>");
+        } catch (e) {
+            document.write(`Failed to run ONNX model: ${e}.`);
+        }
+    }
+    main();
+    console.log('done');
+</script>
+
+</html>
