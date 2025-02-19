@@ -1,26 +1,19 @@
 torch==2.6.0
-pytorch_tabnet==4.1.0
+# pytorch_tabnet==4.1.0
+-e file:../tabnet
+
 pytorch-lightning==2.5.0.post0
 torchvision
 
+scanpy
 
-git+https://github.com/braingeneers/SIMS.git
+# git+https://github.com/braingeneers/SIMS.git
+-e fil:../SIMS
 
 onnx
 onnxscript
 onnxruntime
-
-
-scanpy
-
-
 sclblonnx
-
-onnxsim
-
 netron
 
 ipython
-
-selenium
-chromedriver-binary

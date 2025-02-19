@@ -80,23 +80,49 @@ if __name__ == "__main__":
 
     model = sims.model.network.tabnet.encoder
     _ = model.eval()
-    onnx_program = torch.onnx.export(
+
+    onnx_pgm = torch.onnx.export(
         model,
         torch.zeros(1, len(sims.model.genes)),
+        "data/validation/encoder.onnx",
+        training=torch.onnx.TrainingMode.EVAL,
+        input_names=["input"],
+        output_names=["logits"],
+        external_data=False,
         dynamo=True,
+        optimize=True,
+        verbose=True,
+        # verify=True,
+        # export_params=True,
+        # opset_version=12,
+        # dynamic_axes={"input": {0: "batch_size"}, "logits": {0: "batch_size"}},
     )
-    onnx_program.optimize()
-    verification_options = torch.onnx.verification.VerificationOptions(
-        flatten=True,
-        check_shape=False,
-        rtol=1.3e-3,
-        atol=1e-4,
-    )
-    verify(model, x[0:1], options=verification_options)
-    onnx_program.save("data/validation/encoder.onnx")
+
+    onnx_model = onnx.load("data/validation/encoder.onnx")
+
+    # onnx_program = torch.onnx.export(
+    #     model,
+    #     torch.zeros(1, len(sims.model.genes)),
+    #     dynamo=True,
+    # )
+    # onnx_program.optimize()
+    # onnx_program.save("data/validation/encoder.onnx")
+
+    # verification_options = torch.onnx.verification.VerificationOptions(
+    #     flatten=True,
+    #     check_shape=False,
+    #     rtol=1.3e-3,
+    #     atol=1e-4,
+    # )
+    # verify(model, x[0:1], options=verification_options)
+
+    # sess_options = ort.SessionOptions()
+    # sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+    # session = ort.InferenceSession("data/validation/encoder.onnx", sess_options)
     session = ort.InferenceSession("data/validation/encoder.onnx")
+
     for i in range(4):
-        steps_output_onnx = session.run(None, {"x": x[i : i + 1].detach().numpy()})
+        steps_output_onnx = session.run(None, {"input": x[i : i + 1].detach().numpy()})
         steps_output_py, _ = sims.model.network.tabnet.encoder.forward(x[i : i + 1])
         for j in range(len(steps_output_py)):
             print(

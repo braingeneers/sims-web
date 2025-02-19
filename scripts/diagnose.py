@@ -194,3 +194,10 @@ if __name__ == "__main__":
             sims_model, input_tensor_norm[i : i + 1], "network.tabnet.final_mapping"
         )[0][0]
         close("Final Mapping", a, b)
+
+        output_names = [out.name for out in onnx_model.graph.output]
+        if target_output_name not in output_names:
+            # Use shape inference to get value_info for intermediate tensors.
+            inferred_model = onnx.shape_inference.infer_shapes(onnx_model)
+            for value_info in inferred_model.graph.value_info:
+                print(value_info.name)
