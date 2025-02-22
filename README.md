@@ -48,8 +48,6 @@ After this modification the outputs are concordant to 5+ decimal places. Several
 
 NOTE: SIMS install from git on a Mac works with Python 3.10, other versions not so much...
 
-NOTE: This
-
 Install dependencies for the python model exporting and webapp:
 
 ```
@@ -66,6 +64,7 @@ python scripts/sims-to-onnx.py checkpoints/default.ckpt public/models/
 Validate the output of SIMS to ONNX using the python runtime:
 
 ```
+mkdir -p data/validation
 python scripts/validate.py checkpoints/default.ckpt public/models/default.onnx public/sample.h5ad
 ```
 
@@ -93,7 +92,7 @@ netron public/models/default.onnx
 
 # Performance
 
-ONNX supports multithreaded inference. We allocate total cores - 2 for inference. This leaves 1 thread for the main loop so the UI can remain responsible and 1 thread for ONNX to coordinate via its 'proxy' setting (see worker.js for details).
+ONNX supports multithreaded inference. We allocate total cores on the machine - 2 for inference. This leaves 1 thread for the main loop so the UI can remain responsible and 1 thread for ONNX to coordinate via its 'proxy' setting (see worker.js for details).
 
 Processed 1759 cells in 0.18 minutes on a MacBook M3 Pro or around 10k samples per minute.
 

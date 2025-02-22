@@ -252,8 +252,11 @@ if __name__ == "__main__":
     """
     Compare downloaded csv from web app to predictions for this sample from SIMS
     """
-    onnx_web_predictions = pd.read_csv("data/validation/predictions.csv")
-    sims_predictions = pd.read_csv("data/validation/predictions.gold.csv")
+    # csv downloaded from current web app
+    onnx_web_predictions = pd.read_csv("validation/predictions.csv")
+
+    # predictions on sample.h5ad from a clean production/published SIMS install
+    sims_predictions = pd.read_csv("validation/gold-sample-predictions.csv")
     print(
         "Prediction 0 Is Close:",
         np.allclose(
@@ -318,7 +321,7 @@ if __name__ == "__main__":
     onnx.save(onnx_model, "data/validation/masks.onnx")
     session = ort.InferenceSession("data/validation/masks.onnx")
 
-    onnx_masks = session.run(None, {"input": x[i : i + 1].detach().numpy()})[2:]
+    onnx_masks = session.run(None, {"input": x[0 : 1].detach().numpy()})[2:]
 
     for i, path in enumerate(paths):
         print_diffs(

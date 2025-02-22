@@ -1,10 +1,8 @@
-git+https://github.com/braingeneers/SIMS.git
+https://github.com/braingeneers/SIMS/archive/refs/heads/main.zip
+https://github.com/rcurrie/tabnet/archive/refs/heads/onnx.zip
 
 onnx==1.17.0
 onnxruntime==1.20.1
-onnxscript==0.2.0
-onnxsim==0.4.36
 sclblonnx==0.3.0
 
 netron
-ipython

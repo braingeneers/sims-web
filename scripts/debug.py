@@ -85,6 +85,7 @@ if __name__ == "__main__":
         x = x.double()
 
     # Compare logit outputs
+    print("logits pytorch vs. onnx # decimal places of agreement for each sample:")
     for i in range(num_samples):
         a = session.run(None, {"input": x[i : i + 1].cpu().numpy()})[0][0]
         b = model.forward(x[i : i + 1])[0][0].detach().numpy()
@@ -95,8 +96,6 @@ if __name__ == "__main__":
     print("")
 
     a = model.forward(x)[0].detach().numpy()
-    b = pd.read_csv("../sims-clean/gold-x-logits.csv").to_numpy()[0:100, 1:]
+    b = pd.read_csv("validation/gold-x-logits.csv").to_numpy()[0:100, 1:]
     overall_min = np.min(np.floor(-np.log10(np.abs(a - b) + 1e-16)).astype(int))
     print(f"logits gold vs. current: {overall_min}")
-    # print(a[0])
-    # print(b[0])
