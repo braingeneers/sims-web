@@ -1,19 +1,10 @@
-torch==2.6.0
-# pytorch_tabnet==4.1.0
--e file:../tabnet
+git+https://github.com/braingeneers/SIMS.git
 
-pytorch-lightning==2.5.0.post0
-torchvision
+onnx==1.17.0
+onnxruntime==1.20.1
+onnxscript==0.2.0
+onnxsim==0.4.36
+sclblonnx==0.3.0
 
-scanpy
-
-# git+https://github.com/braingeneers/SIMS.git
--e fil:../SIMS
-
-onnx
-onnxscript
-onnxruntime
-sclblonnx
 netron
-
 ipython

@@ -14,11 +14,41 @@ NOTE: This application has not been fully verified as concordant to the python S
 
 # Architecture
 
-The front end a single page React web app using Material UI and Vite with no back end - just file storage and an HTTP server is required. The python pieces all relate to converting pytorch models into ONNX and then editing the ONNX graph to move as much of predictions processing into the graph as possible (i.e. LpNorm and SoftMax of probabilities) as well as to expose internal nodes such as the encoder output for clustering and the attention masks for explainability.
+The front end a single page React web app using Material UI and Vite with no back end - just file storage and an HTTP server is required. The python pieces all relate to converting PyTorch models into ONNX and then editing the ONNX graph to move as much of predictions processing into the graph as possible (i.e. LpNorm and SoftMax of probabilities) as well as to expose internal nodes such as the encoder output for clustering and the attention masks for explainability.
+
+# ONNX vs. PyTorch Concordance
+
+Sometimes the output of an ONNX model will differ from PyTorch due to floating point numerical differences. To determine if this is the case you can export the model as float64 and see if the results match the original PyTorch float32:
+
+```python
+torch.onnx.export(
+    model.double(),  # convert entire model to double precision
+    sample_input.double(),  # provide double precision sample input
+    ...
+)
+```
+
+SIMS ONNX single precision output differed from PyTorch in around 30% of samples due to small numerical differences in TabNet's Sparsemax implementation. After trying several Grok3 crafted rewrites designed to reduce the single precision numerical differences I found the simplest solution was to run just the Sparsemax sub-graph in double precision via this change to the forward function:
+
+```python
+def forward(self, priors, processed_feat):
+    x = self.fc(processed_feat)
+    x = self.bn(x)
+    x = torch.mul(x, priors)
+    # Force onnx to compute sparsemax in 64bit to avoid numerical differences
+    if torch.onnx.is_in_onnx_export():
+        return self.selector(x.to(torch.float64)).to(x.dtype)
+    else:
+        return self.selector(x)
+```
+
+After this modification the outputs are concordant to 5+ decimal places. Several files in the scripts folder illustrate how to explore the ONNX graph to hunt for places that diverge, YMMV.
 
 # Developing
 
 NOTE: SIMS install from git on a Mac works with Python 3.10, other versions not so much...
+
+NOTE: This
 
 Install dependencies for the python model exporting and webapp:
 

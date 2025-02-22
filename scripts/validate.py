@@ -1,6 +1,11 @@
 """
 Validate SIMS vs. ONNX generate concordant output
 
+This script manually digs into various parts of the SIMS computation and compares
+to onnx on the python runtime and output from the website saved as csv. Its
+primarily a tool to explore the compute graph when you're doing surgery to expose outputs
+and/or diagnose numerical differences.
+
 SIM().network is a Tabnet:
 https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L101
 
@@ -88,12 +93,12 @@ if __name__ == "__main__":
         training=torch.onnx.TrainingMode.EVAL,
         input_names=["input"],
         output_names=["logits"],
-        external_data=False,
-        dynamo=True,
-        optimize=True,
-        verbose=True,
+        export_params=True,
+        # external_data=False,
+        # dynamo=True,
+        # optimize=True,
+        # verbose=True,
         # verify=True,
-        # export_params=True,
         # opset_version=12,
         # dynamic_axes={"input": {0: "batch_size"}, "logits": {0: "batch_size"}},
     )
@@ -146,10 +151,9 @@ if __name__ == "__main__":
     onnx_program = torch.onnx.export(
         model,
         steps_output_py[0],
-        dynamo=True,
+        "data/validation/mappings.onnx",
+        input_names=["input"],
     )
-    onnx_program.optimize()
-    onnx_program.save("data/validation/mappings.onnx")
     session = ort.InferenceSession("data/validation/mappings.onnx")
     res_py = torch.sum(torch.stack(steps_output_py, dim=0), dim=0)
     res_onnx = np.sum(np.stack(steps_output_onnx[0:3], axis=0), axis=0)
@@ -184,13 +188,12 @@ if __name__ == "__main__":
     onnx_program = torch.onnx.export(
         model,
         torch.randn(1, len(sims.model.genes)),
-        dynamo=True,
+        "data/validation/logits.onnx",
+        input_names=["input"],
     )
-    onnx_program.optimize()
-    onnx_program.save("data/validation/logits.onnx")
     session = ort.InferenceSession("data/validation/logits.onnx")
     for i in range(args.batch_size):
-        logits_onnx = session.run(None, {"x": x[i : i + 1].detach().numpy()})
+        logits_onnx = session.run(None, {"input": x[i : i + 1].detach().numpy()})
         logits_py = sims.model.network.forward(x[i : i + 1])
         print(
             f"Logits {i} Is Close:",
@@ -250,8 +253,7 @@ if __name__ == "__main__":
     Compare downloaded csv from web app to predictions for this sample from SIMS
     """
     onnx_web_predictions = pd.read_csv("data/validation/predictions.csv")
-    sims_predictions = sims.predict(args.sample)
-
+    sims_predictions = pd.read_csv("data/validation/predictions.gold.csv")
     print(
         "Prediction 0 Is Close:",
         np.allclose(
@@ -293,80 +295,58 @@ if __name__ == "__main__":
     onnx_model = torch.onnx.export(
         model,
         torch.zeros(1, len(sims.model.genes)),
-        dynamo=True,
+        "data/validation/masks.onnx",
+        input_names=["input"],
     )
-    onnx_model.optimize()
-    onnx_model.save("data/validation/masks.onnx")
     session = ort.InferenceSession("data/validation/masks.onnx")
 
     onnx_model = onnx.load("data/validation/masks.onnx")
 
     paths = [
-        "/encoder/att_transformers.0/selector/Clip_output_0",
-        "/encoder/att_transformers.1/selector/Clip_output_0",
-        "/encoder/att_transformers.2/selector/Clip_output_0",
+        "/tabnet/encoder/att_transformers.0/selector/Clip_output_0",
+        "/tabnet/encoder/att_transformers.1/selector/Clip_output_0",
+        "/tabnet/encoder/att_transformers.2/selector/Clip_output_0",
     ]
     for path in paths:
         shape_info = onnx.shape_inference.infer_shapes(onnx_model)
         for idx, node in enumerate(shape_info.graph.value_info):
             if node.name == path:
-                print(idx, node)
+                # print(idx, node)
                 break
         assert node.name == path
-
         onnx_model.graph.output.extend([node])
+    onnx.save(onnx_model, "data/validation/masks.onnx")
+    session = ort.InferenceSession("data/validation/masks.onnx")
 
-    # onnx_masks = so.run(
-    #     onnx_model.graph, inputs={"input": x.detach().numpy()}, outputs=paths
-    # )
-    # for i, path in enumerate(paths):
-    #     print_diffs(
-    #         f"mask {i}",
-    #         masks[i][0].detach().numpy(),
-    #         onnx_masks[i][0],
-    #         args.decimals,
-    #     )
-    #     print(
-    #         "# non zero values in the mask:",
-    #         np.count_nonzero(masks[i][0].detach().numpy()),
-    #     )
+    onnx_masks = session.run(None, {"input": x[i : i + 1].detach().numpy()})[2:]
+
+    for i, path in enumerate(paths):
+        print_diffs(
+            f"mask {i}",
+            masks[i][0].detach().numpy(),
+            onnx_masks[i][0],
+            args.decimals,
+        )
+        print(
+            "# non zero values in the mask:",
+            np.count_nonzero(masks[i][0].detach().numpy()),
+        )
 
     """
     Explain
     https://github.com/braingeneers/SIMS/blob/e648db22a640da3dba333e86154ace1599dba267/scsims/model.py#L268
     """
-    # M_explain, masks = sims.explain(args.sample, batch_size=args.batch_size, rows=[0])
+    M_explain, masks = sims.explain(args.sample, batch_size=args.batch_size, rows=[0])
+    np.count_nonzero(M_explain[0])
 
-    # np.count_nonzero(M_explain[0])
+    np.count_nonzero(onnx_masks[0])
+    np.count_nonzero(onnx_masks[1])
+    np.count_nonzero(onnx_masks[2])
 
-    # onnx_masks = so.run(
-    #     onnx_model.graph,
-    #     inputs={"input": batch[1][0:1].to(torch.float32).detach().numpy()},
-    #     outputs=paths,
-    # )
-    # np.count_nonzero(onnx_masks[0])
-    # np.count_nonzero(onnx_masks[1])
-    # np.count_nonzero(onnx_masks[2])
-
-    # # onnx_explain = np.sum(onnx_masks, axis=0)
-    # onnx_explain = onnx_masks[0][0] * onnx_masks[1][0] * onnx_masks[2][0]
-    # print(
-    #     "# non zero values in onnx_explain",
-    #     np.count_nonzero(onnx_explain[0]),
-    # )
-    # print_diffs("explain", M_explain[0].detach().numpy(), onnx_explain[0], 2)
-
-    """
-    WebRuntime vs. Python
-    """
-    # from selenium import webdriver
-    # import chromedriver_binary  # Adds chromedriver binary to path
-
-    # driver = webdriver.Chrome()
-    # driver.get("http://localhost:5173")
-    # assert "Python" in driver.title
-
-    # if args.batch_size != 1:
-    #     print(
-    #         "\033[92m WARNING: Batch size > 1 generates output inconsistent with SIMS/PyTorch \033[0m"
-    #     )
+    # onnx_explain = np.sum(onnx_masks, axis=0)
+    onnx_explain = onnx_masks[0][0] * onnx_masks[1][0] * onnx_masks[2][0]
+    print(
+        "# non zero values in onnx_explain",
+        np.count_nonzero(onnx_explain[0]),
+    )
+    print_diffs("explain", M_explain[0], onnx_explain[0], 2)
