@@ -2,6 +2,11 @@
 Exports a SIMS model to ONNX format as well as the gene list and class labels.
 The model is based off of the core SIMS pytorch model exported to ONNX and then
 extended with pre and post processing steps to match those in the SIMS source.
+
+NOTE: TabNet, used by SIMS, must be modified to run sparsemax in double precision
+then exporting to ONNX to ensure concordance with SIMS python. See this commit:
+
+https://github.com/rcurrie/tabnet/commit/812f13774ee8ea60b96d45a639c12f04185ab4a9
 """
 
 import os

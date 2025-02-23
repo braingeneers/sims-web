@@ -349,7 +349,7 @@ if __name__ == "__main__":
     # onnx_explain = np.sum(onnx_masks, axis=0)
     onnx_explain = onnx_masks[0][0] * onnx_masks[1][0] * onnx_masks[2][0]
     print(
-        "# non zero values in onnx_explain",
+        "#s non zero values in onnx_explain",
         np.count_nonzero(onnx_explain[0]),
     )
     print_diffs("explain", M_explain[0], onnx_explain[0], 2)

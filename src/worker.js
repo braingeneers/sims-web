@@ -1,3 +1,48 @@
+/**
+ * Browser Web Worker that runs an ONNX model on an h5ad file and stores the
+ * results in IndexedDB. These results include:
+ * - Cell type predictions with probabilities
+ * - Ranked genes per class that explain the prediction (based on attention)
+ * - UMAP coordinates for each cell
+ *
+ * To start prediction, the worker expects a message with the following data:
+ * {
+ *   type: "startPrediction",
+ *   modelID: "model_id",
+ *   modelURL: "model_url",
+ *   h5File: File,
+ *   cellRangePercent: 100
+ * }
+ *
+ * The worker will then download the model, h5ad file, and run the prediction
+ * and store the results in IndexedDB. It will send "predictionProgress" messages to the
+ * main thread to update the progress bar and "finishedPrediction" message when done.
+ * If an error occurs, it will send an "predictionError" message with the error.
+ *
+ * The results are stored in IndexedDB with the following schema:
+ * {
+ *   datasetLabel: "dataset_label",
+ *   coords: Float32Array, // 2D UMAP coordinates
+ *   cellTypeNames: Array, // Array of cell type names
+ *   cellTypes: Array, // Array of cell type indices
+ *   modelID: "model_id",
+ *   topGeneIndicesByClass: Array, // Array of top gene indices per class
+ *   genes: Array, // Array of gene names
+ *   overallTopGenes: Array, // Array of top gene indices overall
+ *   cellNames: Array, // Array of cell names
+ *   predictions: Array, // Array of cell type predictions
+ *   probabilities: Array // Array of prediction probabilities
+ * }
+ *
+ * The h5 file is read using h5wasm which is a WebAssembly of the h5 library.
+ * We utilize its ability to map the file into the browsers file system and
+ * thereby read the gene expression data incrementally to support unlimited
+ * file sizes. Note this requires the expression data to be stores in
+ * column-major order - which most h5ad files are.
+ *
+ * The prediction is run in multiple threads fed by filling double buffers
+ * from the h5 file in a separate thread towards keeping all the threads busy.
+ */
 import h5wasm from "h5wasm";
 import Prando from "prando";
 import * as UMAP from "umap-js";
@@ -6,22 +51,24 @@ import * as ort from "onnxruntime-web";
 
 import { openDB } from "idb";
 
-// Includes WebAssembly backend only
-// import * as ort from "onnxruntime-web/wasm";
-
-// Includes WebAssembly single-threaded only, with training support
-// import * as ort from "onnxruntime-web/training";
-
-// Top K genes to accumulate attention for
-self.K = 10;
-
-// Worker global variables
+// Dictionary with various model information (id, genes, session)
 self.model = null;
+
+// Top number of genes to return to explain per class (i.e. Top K)
+self.numExplainGenes = 10;
+
+// #classes x #genes matrix to accumulate attention for explaining predictions
 self.attentionAccumulators = null;
 
-// Leave one thread for the main thread
+// Number of threads to use for inference. Use all but one for the GUI to run in
 self.numThreads = navigator.hardwareConcurrency - 1;
-// Leave one thread for onnx to proxy from
+
+// Tuned batch size - if I/O, pre-processing and inflation is fast relative to
+// the model inference then increase the batch size so that inference is never
+// waiting on data. If the model is very large and inference is slow then
+// reduce the batch size so that inference can be parallelized across more
+// threads. The ONNX model supports variable size batches which plays into
+// this as well.
 self.batchSize = self.numThreads - 1;
 
 console.log(`Number of threads: ${self.numThreads}`);
@@ -29,41 +76,48 @@ console.log(`Batch size: ${self.batchSize}`);
 
 // Limit how many UMAP points we calculate which limits memory by limiting the
 // encoding vectors we keep around
-self.maxNumCoords = 2000;
+self.maxNumCellsToUMAP = 2000;
 
 // Handle messages from the main thread
 self.addEventListener("message", async function (event) {
   if (event.data.type === "startPrediction") {
-    predict(event);
+    predict(
+      event.data.modelID,
+      event.data.modelURL,
+      event.data.h5File,
+      event.data.cellRangePercent
+    );
   }
 });
 
 /**
  * Create an ONNX Runtime session for the selected model
+ * @param {string} modelURL - The URL of the model
  * @param {string} id - The id of the model to load
  * @returns {Promise} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(modelURL, id) {
-  console.log(`Instantiating model ${id} from ${modelURL}`);
+async function instantiateModel(modelURL, modelID) {
+  console.log(`Instantiating model ${modelID} from ${modelURL}`);
   self.postMessage({ type: "status", message: "Downloading model..." });
 
-  // Load the model gene list
-  let response = await fetch(`${modelURL}/${id}.genes`);
+  // Fetch the model gene list
+  let response = await fetch(`${modelURL}/${modelID}.genes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const genes = (await response.text()).split("\n");
   console.log("Model Genes", genes.slice(0, 5));
 
-  // Load the model classes
-  response = await fetch(`${modelURL}/${id}.classes`);
+  // Fetch the model classes
+  response = await fetch(`${modelURL}/${modelID}.classes`);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
   const classes = (await response.text()).split("\n");
   console.log("Model Classes", classes);
 
-  response = await fetch(`${modelURL}/${id}.onnx`);
+  // Fetch the model ONNX file incrementally to show progress
+  response = await fetch(`${modelURL}/${modelID}.onnx`);
   if (!response.ok) {
     throw new Error(`Error fetching onnx file: ${response.status}`);
   }
@@ -86,7 +140,7 @@ async function instantiateModel(modelURL, id) {
 
     // Send progress update to the main thread
     self.postMessage({
-      type: "progress",
+      type: "predictionProgress",
       message: "Downloading model...",
       countFinished: loadedBytes,
       totalToProcess: totalBytes,
@@ -101,55 +155,31 @@ async function instantiateModel(modelURL, id) {
     position += chunk.length;
   }
 
-  self.postMessage({ type: "status", message: "Instantiating model..." });
   // Initialize ONNX Runtime environment
+  self.postMessage({ type: "status", message: "Instantiating model..." });
   // See https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html
-  // ort.env.wasm.wasmPaths = "/dist/";
   ort.env.wasm.numThreads = self.numThreads;
   ort.env.wasm.proxy = true;
   let options = {
     executionProviders: ["wasm"], // alias of 'cpu'
-    // executionMode: "sequential",
     executionMode: "parallel",
-    // graphOptimizationLevel: "all",
-    // inter_op_num_threads: numThreads,
-    // intra_op_num_threads: numThreads,
-    // enableCpuMemArena: true,
-    // enableMemPattern: true,
-    // extra: {
-    //   optimization: {
-    //     enable_gelu_approximation: "1",
-    //   },
-    //   session: {
-    //     intra_op_num_threads: numThreads,
-    //     inter_op_num_threads: numThreads,
-    //     disable_prepacking: "1",
-    //     use_device_allocator_for_initializers: "1",
-    //     use_ort_model_bytes_directly: "1",
-    //     use_ort_model_bytes_for_initializers: "1",
-    //   },
-    // },
   };
 
-  // Debugging if localhost
-  // if (location.hostname === "localhost") {
-  //   ort.env.debug = true;
-  //   ort.env.logLevel = "verbose";
-  //   ort.env.trace = true;
-  //   options["logSeverityLevel"] = 0;
-  //   options["logVerbosityLevel"] = 0;
-  // }
-
-  // Create the InferenceSession with the model ArrayBuffer
+  // Create the InferenceSession with the model ArrayBuffer we fetched incrementally
   const session = await ort.InferenceSession.create(modelArray.buffer, options);
   console.log("Model Output names", session.outputNames);
 
-  return { id, session, genes, classes };
+  return { modelID, session, genes, classes };
 }
 
-// Compute the source indices within sample gene space and destination within
-// the model gene space for each gene in the sample gene list
-// These are used to populate a sample gene expression tensor into the model
+/*
+ * Precompute the inflation indices for the sample gene list
+ * @param {Array} currentModelGenes - The gene list of the model
+ * @param {Array} sampleGenes - The gene list of the sample
+ * @returns {Array} - The inflation indices
+ * These are used in fillBatchData inflate each sample from sample gene list space
+ * into the model's gene list space
+ */
 function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   let inflationIndices = [];
   for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
@@ -160,6 +190,20 @@ function precomputeInflationIndices(currentModelGenes, sampleGenes) {
   return inflationIndices;
 }
 
+/**
+ * Fill the batch data and inflate it into the model's gene list space
+ * @param {number} batchStart - The start index of the batch
+ * @param {number} currentBatchSize - The size of the batch
+ * @param {Array} data - The data array
+ * @param {Array} indices - The indices array
+ * @param {Array} indptr - The indptr array
+ * @param {boolean} isSparse - Whether the data is sparse
+ * @param {Array} sampleGenes - The gene list of the sample
+ * @param {Array} inflationIndices - The inflation indices
+ * @param {Array} inflatedBatchData - The inflated batch data
+ * This function fills the batch data and inflates it into the model's gene list space
+ * in one step. It also handles both sparse and non-sparse data.
+ */
 function fillBatchData(
   batchStart,
   currentBatchSize,
@@ -221,18 +265,24 @@ function fillBatchData(
   }
 }
 
-async function predict(event) {
+/**
+ * Run the prediction on the model and store the results in IndexedDB
+ * @param {string} modelID - The id of the model
+ * @param {string} modelURL - The URL of the model
+ * @param {File} h5File - The h5ad file
+ * @param {number} cellRangePercent - The percentage of cells to process
+ * When finished, it sends a "finishedPrediction" message to the main thread.
+ */
+async function predict(modelID, modelURL, h5File, cellRangePercent) {
   self.postMessage({ type: "status", message: "Loading libraries..." });
   const Module = await h5wasm.ready;
   const { FS } = Module;
   console.log("h5wasm loaded");
 
   try {
-    if (!self.model || self.model.id !== event.data.modelID) {
-      self.model = await instantiateModel(
-        event.data.modelURL,
-        event.data.modelID
-      );
+    // Load the model if it's not already loaded
+    if (!self.model || self.model.id !== modelID) {
+      self.model = await instantiateModel(modelURL, modelID);
     }
 
     // Reset attention accumulators
@@ -240,13 +290,16 @@ async function predict(event) {
       self.model.classes.length * self.model.genes.length
     );
 
+    // Load the h5ad file mapping it to the /work directory so we can read
+    // it with h5wasm incrementally to support unlimited file sizes
+    // We also figure out the list of genes in the sample and the list of cell names
     self.postMessage({ type: "status", message: "Loading file" });
     if (!FS.analyzePath("/work").exists) {
       FS.mkdir("/work");
     }
-    FS.mount(FS.filesystems.WORKERFS, { files: [event.data.h5File] }, "/work");
+    FS.mount(FS.filesystems.WORKERFS, { files: [h5File] }, "/work");
 
-    const annData = new h5wasm.File(`/work/${event.data.h5File.name}`, "r");
+    const annData = new h5wasm.File(`/work/${h5File.name}`, "r");
     console.log(annData);
 
     console.log(`Top level keys: ${annData.keys()}`);
@@ -284,11 +337,11 @@ async function predict(event) {
     const totalNumCells = cellNames.length;
 
     // Limit the number of cells to process based on % slider
-    cellNames = cellNames.slice(
-      0,
-      (event.data.cellRangePercent * cellNames.length) / 100
-    );
+    cellNames = cellNames.slice(0, (cellRangePercent * cellNames.length) / 100);
 
+    // Setup all the data structures for reading the expression data incrementally
+    // including dealing with sparse and inflating the sample gene list into the
+    // model's gene list.
     let isSparse = false;
     let data = null;
     let indices = null;
@@ -329,7 +382,9 @@ async function predict(event) {
     ];
     let activeBuffer = 0;
 
-    // Fill the first buffer
+    // Fill the first buffer to kickstart the process whereby while prediction runs
+    // on the first buffer, the second buffer is filled with
+    // the next batch of cells.
     buffers[activeBuffer].size = Math.min(self.batchSize, cellNames.length);
     fillBatchData(
       0,
@@ -343,7 +398,7 @@ async function predict(event) {
       buffers[activeBuffer].data
     );
 
-    // Begin processing batches of cells
+    // Begin processing batches of cells double buffer style
     for (
       let batchStart = 0;
       batchStart < cellNames.length;
@@ -404,9 +459,9 @@ async function predict(event) {
           output.probs.data.slice(batchSlot * 3, batchSlot * 3 + 3),
         ]);
 
-        // Only push up to maxNumCoords so we limit the memory consumption as these
+        // Only push up to maxNumCellsToUMAP so we limit the memory consumption as these
         // are 32 float vectors per cell
-        if (overallCellIndex < self.maxNumCoords) {
+        if (overallCellIndex < self.maxNumCellsToUMAP) {
           // Each encoding row is shaped by your model: e.g. 16 dims
           const encSize = output.encoding.dims[1];
           const encSliceStart = batchSlot * encSize;
@@ -427,7 +482,7 @@ async function predict(event) {
 
       // Post progress update
       self.postMessage({
-        type: "progress",
+        type: "predictionProgress",
         message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
         countFinished: nextStart,
         totalToProcess: cellNames.length,
@@ -437,6 +492,7 @@ async function predict(event) {
       activeBuffer = nextBuffer;
     }
 
+    // All done so unmount the h5 file from the browsers file system
     annData.close();
     FS.unmount("/work");
 
@@ -462,20 +518,21 @@ async function predict(event) {
       coordinates = await umap.fitAsync(encodings, (epochNumber) => {
         // check progress and give user feedback, or return `false` to stop
         self.postMessage({
-          type: "progress",
+          type: "predictionProgress",
           message: `Computing the first ${encodings.length} coordinates...`,
           countFinished: epochNumber,
           totalToProcess: umap.getNEpochs(),
         });
       });
     } catch (error) {
-      self.postMessage({ type: "error", error });
+      self.postMessage({ type: "predictionError", error });
       throw error;
     }
 
     // ========================================================================
     // Calculate top K gene indices per class and overall as well as
-    // the overall top k gene indices for all predictions
+    // the overall top k gene indices for all predictions. These are used
+    // to explain the predictions per class and overall.
     // ========================================================================
     let topGeneIndicesByClass = [];
 
@@ -493,7 +550,7 @@ async function predict(event) {
             i * self.model.genes.length,
             (i + 1) * self.model.genes.length
           ),
-          self.K
+          self.numExplainGenes
         )
       );
       for (let j = 0; j < self.model.genes.length; j++) {
@@ -501,7 +558,7 @@ async function predict(event) {
           self.attentionAccumulators[i * self.model.genes.length + j];
       }
     }
-    let overallTopGenes = topKIndices(overallAccumulator, self.K);
+    let overallTopGenes = topKIndices(overallAccumulator, self.numExplainGenes);
 
     const cellTypes = labels.map((label) => label[0][0]);
 
@@ -510,8 +567,9 @@ async function predict(event) {
     const tx = db.transaction("datasets", "readwrite");
     const store = tx.objectStore("datasets");
     await store.put({
-      // ! Used by UCSC Cell Browser
-      datasetLabel: event.data.h5File.name,
+      // Note: these are expected and used by the UCSC cell browser so don't change
+      // without coordinating with the UCSC cell browser team (i.e. Max!)
+      datasetLabel: h5File.name,
       coords: coordinates.flat(), // Float32Array of length 2*n
       cellTypeNames: self.model.classes, // Array of strings
       cellTypes: cellTypes,
@@ -528,15 +586,16 @@ async function predict(event) {
     await tx.done;
     db.close();
 
+    // Let the main thread know we're done and results are ready in IndexDB
     self.postMessage({
-      type: "finished",
-      datasetLabel: event.data.h5File.name,
+      type: "finishedPrediction",
+      datasetLabel: h5File.name,
       elapsedTime,
       totalProcessed: cellNames.length,
       totalNumCells,
     });
   } catch (error) {
     // FS.unmount("/work");
-    self.postMessage({ type: "error", error: error });
+    self.postMessage({ type: "predictionError", error: error });
   }
 }

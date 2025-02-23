@@ -1,3 +1,7 @@
+/** 
+ * React based main app component that runs a SIMS model client side
+ * on a user provided AnnData/Scanpy file via ONNX in worker.js
+ */
 import { useState, useEffect } from "react";
 import {
   Alert,
@@ -139,13 +143,13 @@ function App() {
         case "status":
           setStatusMessage(evt.data.message);
           break;
-        case "progress":
+        case "predictionProgress":
           setStatusMessage(evt.data.message);
           setProgress(
             Math.round((evt.data.countFinished / evt.data.totalToProcess) * 100)
           );
           break;
-        case "finished":
+        case "finishedPrediction":
           setStatusMessage(
             `Processed ${evt.data.totalProcessed} of ${
               evt.data.totalNumCells
@@ -154,7 +158,7 @@ function App() {
           setIsPredicting(false);
           loadDataset();
           break;
-        case "error":
+        case "predictionError":
           setStatusMessage(evt.data.error.toString());
           setIsPredicting(false);
           break;
