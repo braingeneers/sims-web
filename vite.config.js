@@ -43,4 +43,15 @@ export default defineConfig({
       ],
     }),
   ],
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Skip "use client" directive warnings
+        if (warning.message.includes('"use client"')) {
+          return;
+        }
+        warn(warning);
+      },
+    },
+  },
 });
