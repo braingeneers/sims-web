@@ -1,4 +1,4 @@
+allen-celltypes+human-cortex
 default
-human
 pbmc3k
 pre-postnatal-cortex
