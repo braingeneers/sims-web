@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <v-app-bar>
-      <v-toolbar-title>Cell Stray</v-toolbar-title>
+      <v-toolbar-title>Cell Dimension</v-toolbar-title>
       <v-spacer></v-spacer>
       <v-btn @click="toggleTheme">
         <v-icon>mdi-theme-light-dark</v-icon>
