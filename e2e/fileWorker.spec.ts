@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-// Configure test to use proper origin
-// const workerUrl = 'http://localhost:5173/src/workers/fileWorker.js'
 const workerUrl = '/src/workers/fileWorker.js'
+// const workerUrl = '/src/worker.js'
 
 test('Web Worker doubles the input number', async ({ page }) => {
   await page.goto('/')

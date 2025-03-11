@@ -5,14 +5,17 @@
       <v-spacer></v-spacer>
 
       <!-- File Selector -->
-      <v-select
+      <v-file-input
         v-model="selectedFile"
-        :items="fileOptions"
-        label="H5AD File"
+        accept=".h5ad"
+        label="Select H5AD File"
         variant="underlined"
         class="mx-2"
-        style="max-width: 200px"
-      ></v-select>
+        style="max-width: 250px"
+        hide-details
+        truncate-length="15"
+        @update:model-value="handleFileSelected"
+      ></v-file-input>
 
       <!-- First Worker Selector -->
       <v-select
@@ -22,6 +25,8 @@
         variant="underlined"
         class="mx-2"
         style="max-width: 200px"
+        item-title="title"
+        item-value="value"
       ></v-select>
 
       <!-- Second Worker Selector -->
@@ -88,19 +93,59 @@
 import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import SIMSWorker from './workers/sims-worker?worker'
+
 const theme = useTheme()
 const isProcessing = ref(false)
 const currentStatus = ref('')
 
+// Model metadata type
+interface ModelMetadata {
+  title: string
+  [key: string]: unknown
+}
+
 // Available files and workers
-const fileOptions = ref(['sample.h5ad', 'pbmc.h5ad', 'brain.h5ad'])
-const fileWorkerOptions = ref(['H5AD File Loader'])
+const fileWorkerOptions = ref<{ title: string; value: string }[]>([])
 const analysisWorkerOptions = ref(['Average Calculator', 'Min/Max Calculator'])
 
 // Selected options
-const selectedFile = ref('sample.h5ad')
-const selectedFileWorker = ref('H5AD File Loader')
+const selectedFile = ref<File | null>(null)
+const selectedFileWorker = ref('')
 const selectedAnalysisWorker = ref('Average Calculator')
+
+// Model metadata
+const modelMetadata = ref<Record<string, ModelMetadata>>({})
+
+// Fetch models and their metadata
+async function fetchModels() {
+  try {
+    const modelsResponse = await fetch('/models/models.txt')
+    const modelsText = await modelsResponse.text()
+    const modelIds = modelsText.trim().split('\n')
+
+    // Fetch metadata for each model
+    const metadata: Record<string, ModelMetadata> = {}
+    for (const modelId of modelIds) {
+      const metadataResponse = await fetch(`/models/${modelId}.json`)
+      metadata[modelId] = await metadataResponse.json()
+    }
+
+    modelMetadata.value = metadata
+    fileWorkerOptions.value = modelIds.map((id) => ({
+      title: metadata[id].title || id,
+      value: id,
+    }))
+
+    // Set default selection if available
+    if (fileWorkerOptions.value.length > 0) {
+      selectedFileWorker.value = 'default'
+    }
+  } catch (error) {
+    console.error('Error fetching models:', error)
+    currentStatus.value = 'Error loading models'
+  }
+}
 
 // Workers
 const fileWorker = ref<Worker | null>(null)
@@ -128,7 +173,7 @@ function toggleTheme() {
 
 function initializeWorkers() {
   // Create file worker
-  fileWorker.value = new Worker(new URL('./workers/fileWorker.js', import.meta.url))
+  fileWorker.value = new SIMSWorker()
   fileWorker.value.onmessage = handleFileWorkerMessage
 
   // Create processing worker
@@ -137,6 +182,12 @@ function initializeWorkers() {
 }
 
 function runPipeline() {
+  // Check if a file is selected
+  if (!selectedFile.value) {
+    currentStatus.value = 'Please select an H5AD file first'
+    return
+  }
+
   // Reset previous results
   fileStats.value = null
   analysisResults.value = []
@@ -162,11 +213,18 @@ function runPipeline() {
   }
 
   // Start the pipeline by sending a message to the file worker
+  const modelURL = `${window.location.protocol}//${window.location.host}/models`
   fileWorker.value?.postMessage({
-    type: 'processFile',
-    file: selectedFile.value,
-    batchSize: batchSize.value,
+    type: 'startPrediction',
+    modelID: selectedFileWorker.value,
+    modelURL: modelURL,
+    h5File: selectedFile.value,
+    cellRangePercent: 25,
   })
+}
+
+function handleFileSelected(file: File) {
+  selectedFile.value = file
 }
 
 function handleFileWorkerMessage(event: MessageEvent) {
@@ -244,6 +302,7 @@ function handleAnalysisWorkerMessage(event: MessageEvent) {
 
 onMounted(() => {
   initializeWorkers()
+  fetchModels()
 })
 
 onUnmounted(() => {
