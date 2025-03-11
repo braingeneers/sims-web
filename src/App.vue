@@ -168,9 +168,6 @@ const analysisResults = ref<
   }>
 >([])
 
-// The batch size for processing
-const batchSize = ref(100)
-
 function toggleTheme() {
   theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark'
 }
@@ -183,7 +180,7 @@ const resultsDB = ref<IDBPDatabase | null>(null)
 async function loadDataset() {
   try {
     const db = await openDB('sims-web', DB_VERSION, {
-      upgrade(db, oldVersion, newVersion, transaction) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         // Case 1: No database - create it
         if (!db.objectStoreNames.contains('datasets')) {
           db.createObjectStore('datasets', {
@@ -219,8 +216,8 @@ function initializeWorkers() {
   fileWorker.value.onmessage = handleFileWorkerMessage
 
   // Create processing worker
-  processingWorker.value = new Worker(new URL('./workers/processingWorker.js', import.meta.url))
-  processingWorker.value.onmessage = handleProcessingWorkerMessage
+  // processingWorker.value = new Worker(new URL('./workers/processingWorker.js', import.meta.url))
+  // processingWorker.value.onmessage = handleProcessingWorkerMessage
 }
 
 function runPipeline() {
@@ -248,13 +245,13 @@ function runPipeline() {
     analysisWorker.value.terminate()
   }
 
-  if (selectedAnalysisWorker.value === 'Average Calculator') {
-    analysisWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
-    analysisWorker.value.onmessage = handleAnalysisWorkerMessage
-  } else {
-    analysisWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
-    analysisWorker.value.onmessage = handleAnalysisWorkerMessage
-  }
+  // if (selectedAnalysisWorker.value === 'Average Calculator') {
+  //   analysisWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
+  //   analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  // } else {
+  //   analysisWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
+  //   analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  // }
 
   // Start the pipeline by sending a message to the file worker
   const modelURL = `${window.location.protocol}//${window.location.host}/models`
@@ -267,8 +264,15 @@ function runPipeline() {
   })
 }
 
-function handleFileSelected(file: File) {
-  selectedFile.value = file
+function handleFileSelected(files: File | File[]) {
+  const file = Array.isArray(files) ? files[0] : files
+  if (file) {
+    selectedFile.value = file
+    currentStatus.value = `Selected file: ${file.name}`
+  } else {
+    selectedFile.value = null
+    currentStatus.value = 'No file selected'
+  }
 }
 
 function handleFileWorkerMessage(event: MessageEvent) {
@@ -317,51 +321,51 @@ function handleFileWorkerMessage(event: MessageEvent) {
   }
 }
 
-function handleProcessingWorkerMessage(event: MessageEvent) {
-  const { type, message } = event.data
+// function handleProcessingWorkerMessage(event: MessageEvent) {
+//   const { type, message } = event.data
 
-  if (type === 'status') {
-    currentStatus.value = message
-  } else if (type === 'batchProcessed') {
-    // Pass the processed data to the selected analysis worker
-    if (selectedAnalysisWorker.value === 'Average Calculator') {
-      analysisWorker.value?.postMessage({
-        type: 'computeAverage',
-        batch: event.data.batch,
-        batchSize: event.data.batchSize,
-        numCells: event.data.numCells,
-        numGenes: event.data.numGenes,
-      })
-    } else {
-      analysisWorker.value?.postMessage({
-        type: 'computeMinMax',
-        batch: event.data.batch,
-        batchSize: event.data.batchSize,
-        numCells: event.data.numCells,
-        numGenes: event.data.numGenes,
-      })
-    }
-    currentStatus.value = message
-  } else if (type === 'error') {
-    currentStatus.value = message
-    isProcessing.value = false
-  }
-}
+//   if (type === 'status') {
+//     currentStatus.value = message
+//   } else if (type === 'batchProcessed') {
+//     // Pass the processed data to the selected analysis worker
+//     if (selectedAnalysisWorker.value === 'Average Calculator') {
+//       analysisWorker.value?.postMessage({
+//         type: 'computeAverage',
+//         batch: event.data.batch,
+//         batchSize: event.data.batchSize,
+//         numCells: event.data.numCells,
+//         numGenes: event.data.numGenes,
+//       })
+//     } else {
+//       analysisWorker.value?.postMessage({
+//         type: 'computeMinMax',
+//         batch: event.data.batch,
+//         batchSize: event.data.batchSize,
+//         numCells: event.data.numCells,
+//         numGenes: event.data.numGenes,
+//       })
+//     }
+//     currentStatus.value = message
+//   } else if (type === 'error') {
+//     currentStatus.value = message
+//     isProcessing.value = false
+//   }
+// }
 
-function handleAnalysisWorkerMessage(event: MessageEvent) {
-  const { type, message } = event.data
+// function handleAnalysisWorkerMessage(event: MessageEvent) {
+//   const { type, message } = event.data
 
-  if (type === 'status') {
-    currentStatus.value = message
-  } else if (type === 'analysisResult') {
-    analysisResults.value.push(event.data.result)
-    currentStatus.value = message
-    isProcessing.value = false
-  } else if (type === 'error') {
-    currentStatus.value = message
-    isProcessing.value = false
-  }
-}
+//   if (type === 'status') {
+//     currentStatus.value = message
+//   } else if (type === 'analysisResult') {
+//     analysisResults.value.push(event.data.result)
+//     currentStatus.value = message
+//     isProcessing.value = false
+//   } else if (type === 'error') {
+//     currentStatus.value = message
+//     isProcessing.value = false
+//   }
+// }
 
 // Fetch a sample file on application load
 async function fetchSampleFile() {

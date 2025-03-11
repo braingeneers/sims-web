@@ -5,6 +5,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
+import { emptyDir } from 'rollup-plugin-empty-dir'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -19,21 +20,15 @@ export default defineConfig({
       ignored: ['**/venv/**', '**/node_modules/**', '**/data/**'],
     },
     headers: {
-      // Required for the onnxruntime-web to use multiple threads
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
-      // "Access-Control-Expose-Headers": "*",kkkk
-      // "Access-Control-Allow-Headers": "*",
     },
   },
   preview: {
     cors: true,
     headers: {
-      // Required for the onnxruntime-web to use multiple threads
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
-      // "Access-Control-Expose-Headers": "*",
-      // "Access-Control-Allow-Headers": "*",
     },
   },
   plugins: [
@@ -46,8 +41,17 @@ export default defineConfig({
           src: 'node_modules/onnxruntime-web/dist/*.wasm',
           dest: 'assets',
         },
+        {
+          src: 'public/*',
+          dest: './',
+        },
+        {
+          src: 'public/models/*',
+          dest: './models',
+        },
       ],
     }),
+    emptyDir(),
   ],
   resolve: {
     alias: {
@@ -55,9 +59,20 @@ export default defineConfig({
     },
   },
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    sourcemap: true,
+    minify: 'terser',
     rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['vue'],
+        },
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]',
+      },
       onwarn(warning, warn) {
-        // Skip "use client" directive warnings
         if (warning.message.includes('"use client"')) {
           return
         }
