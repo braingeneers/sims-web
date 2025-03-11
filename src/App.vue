@@ -93,6 +93,7 @@
 import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import { openDB, IDBPDatabase } from 'idb'
 import SIMSWorker from './workers/sims-worker?worker'
 
 const theme = useTheme()
@@ -172,6 +173,44 @@ const batchSize = ref(100)
 
 function toggleTheme() {
   theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark'
+}
+
+// IndexedDB
+const DB_VERSION = 2
+
+const resultsDB = ref<IDBPDatabase | null>(null)
+
+async function loadDataset() {
+  try {
+    const db = await openDB('sims-web', DB_VERSION, {
+      upgrade(db, oldVersion, newVersion, transaction) {
+        // Case 1: No database - create it
+        if (!db.objectStoreNames.contains('datasets')) {
+          db.createObjectStore('datasets', {
+            keyPath: 'datasetLabel',
+            autoIncrement: true,
+          })
+        }
+
+        // Case 2: Version 1 exists - clear it
+        if (oldVersion === 1) {
+          transaction.objectStore('datasets').clear()
+          currentStatus.value = 'Database upgraded - previous results cleared'
+        }
+      },
+    })
+
+    // Case 3: Version 2 exists - load first dataset
+    const keys = await db.getAllKeys('datasets')
+    if (keys.length > 0) {
+      resultsDB.value = await db.get('datasets', keys[0])
+    }
+
+    db.close()
+  } catch (error) {
+    console.error('Database error:', error)
+    currentStatus.value = 'Error accessing database'
+  }
 }
 
 function initializeWorkers() {
@@ -344,6 +383,7 @@ async function fetchSampleFile() {
 }
 
 onMounted(() => {
+  loadDataset()
   initializeWorkers()
   fetchModels()
   fetchSampleFile() // Load the sample file when the app mounts
