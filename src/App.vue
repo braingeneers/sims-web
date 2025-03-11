@@ -300,9 +300,29 @@ function handleAnalysisWorkerMessage(event: MessageEvent) {
   }
 }
 
+// Fetch a sample file on application load
+async function fetchSampleFile() {
+  try {
+    const sampleFileName = 'sample.h5ad'
+    currentStatus.value = 'Loading sample file...'
+    
+    const response = await fetch(sampleFileName)
+    const blob = await response.blob()
+    const file = new File([blob], sampleFileName, { type: blob.type })
+    
+    selectedFile.value = file
+    currentStatus.value = 'Sample file loaded'
+    console.log('Sample File:', file)
+  } catch (error) {
+    console.error('Error loading sample file:', error)
+    currentStatus.value = 'Error loading sample file'
+  }
+}
+
 onMounted(() => {
   initializeWorkers()
   fetchModels()
+  fetchSampleFile() // Load the sample file when the app mounts
 })
 
 onUnmounted(() => {

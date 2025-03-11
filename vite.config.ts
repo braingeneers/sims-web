@@ -26,6 +26,16 @@ export default defineConfig({
       // "Access-Control-Allow-Headers": "*",
     },
   },
+  preview: {
+    cors: true,
+    headers: {
+      // Required for the onnxruntime-web to use multiple threads
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      // "Access-Control-Expose-Headers": "*",
+      // "Access-Control-Allow-Headers": "*",
+    },
+  },
   plugins: [
     vue(),
     vueJsx(),
@@ -42,6 +52,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Skip "use client" directive warnings
+        if (warning.message.includes('"use client"')) {
+          return
+        }
+        warn(warning)
+      },
     },
   },
 })
