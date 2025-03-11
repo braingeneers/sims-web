@@ -55,7 +55,7 @@
           <v-card-text>
             <v-progress-linear
               v-if="isProcessing"
-              indeterminate
+              :model-value="predictionProgress"
               color="primary"
               height="10"
             ></v-progress-linear>
@@ -98,6 +98,9 @@ import SIMSWorker from './workers/sims-worker?worker'
 const theme = useTheme()
 const isProcessing = ref(false)
 const currentStatus = ref('')
+const predictionProgress = ref(0)
+const processingTime = ref(0)
+const processingStartTime = ref(0)
 
 // Model metadata type
 interface ModelMetadata {
@@ -193,6 +196,8 @@ function runPipeline() {
   analysisResults.value = []
   isProcessing.value = true
   currentStatus.value = 'Starting pipeline...'
+  predictionProgress.value = 0
+  processingStartTime.value = Date.now()
 
   // Initialize workers if needed
   if (!fileWorker.value || !processingWorker.value) {
@@ -248,7 +253,26 @@ function handleFileWorkerMessage(event: MessageEvent) {
       numGenes: event.data.numGenes,
     })
     currentStatus.value = message
-  } else if (type === 'error') {
+  } else if (type === 'predictionProgress') {
+    // Update progress based on countFinished and totalToProcess
+    const { countFinished, totalToProcess } = event.data
+    predictionProgress.value = (countFinished / totalToProcess) * 100
+    currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(predictionProgress.value)}%)`
+  } else if (type === 'finishedPrediction') {
+    // Calculate processing time
+    processingTime.value = (Date.now() - processingStartTime.value) / 1000
+
+    // Reset UI state
+    isProcessing.value = false
+    predictionProgress.value = 0
+    currentStatus.value = ''
+
+    // Add processing result to analysis results
+    analysisResults.value.push({
+      type: 'Prediction',
+      summary: `Processed ${event.data.totalProcessed} items in ${processingTime.value.toFixed(2)} seconds`,
+    })
+  } else if (type === 'predictionError') {
     currentStatus.value = message
     isProcessing.value = false
   }
@@ -305,11 +329,11 @@ async function fetchSampleFile() {
   try {
     const sampleFileName = 'sample.h5ad'
     currentStatus.value = 'Loading sample file...'
-    
+
     const response = await fetch(sampleFileName)
     const blob = await response.blob()
     const file = new File([blob], sampleFileName, { type: blob.type })
-    
+
     selectedFile.value = file
     currentStatus.value = 'Sample file loaded'
     console.log('Sample File:', file)
