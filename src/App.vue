@@ -1,67 +1,86 @@
 <template>
   <v-app>
     <v-app-bar>
-      <v-toolbar-title>Cell Dimension</v-toolbar-title>
+      <v-toolbar-title>Cell Space</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-btn @click="openFileDialog = true">
-        <v-icon>mdi-folder-open</v-icon>
-      </v-btn>
+
+      <!-- File Selector -->
+      <v-select
+        v-model="selectedFile"
+        :items="fileOptions"
+        label="H5AD File"
+        variant="underlined"
+        class="mx-2"
+        style="max-width: 200px"
+      ></v-select>
+
+      <!-- First Worker Selector -->
+      <v-select
+        v-model="selectedFileWorker"
+        :items="fileWorkerOptions"
+        label="File Worker"
+        variant="underlined"
+        class="mx-2"
+        style="max-width: 200px"
+      ></v-select>
+
+      <!-- Second Worker Selector -->
+      <v-select
+        v-model="selectedAnalysisWorker"
+        :items="analysisWorkerOptions"
+        label="Analysis Worker"
+        variant="underlined"
+        class="mx-2"
+        style="max-width: 200px"
+      ></v-select>
+
+      <!-- Run Button -->
+      <v-btn color="primary" class="mx-2" @click="runPipeline" :loading="isProcessing"> Run </v-btn>
+
       <v-btn @click="toggleTheme">
         <v-icon>mdi-theme-light-dark</v-icon>
       </v-btn>
     </v-app-bar>
+
     <v-main>
-      <div>Cell Stray</div>
+      <v-container fluid>
+        <!-- Status Display -->
+        <v-card class="mb-4">
+          <v-card-title>Pipeline Status</v-card-title>
+          <v-card-text>
+            <v-progress-linear
+              v-if="isProcessing"
+              indeterminate
+              color="primary"
+              height="10"
+            ></v-progress-linear>
+            <p v-if="currentStatus">{{ currentStatus }}</p>
+          </v-card-text>
+        </v-card>
+
+        <!-- File Information Display -->
+        <v-card v-if="fileStats" class="mb-4">
+          <v-card-title>File Information</v-card-title>
+          <v-card-text>
+            <p><strong>Cells:</strong> {{ fileStats.numCells }}</p>
+            <p><strong>Genes:</strong> {{ fileStats.numGenes }}</p>
+          </v-card-text>
+        </v-card>
+
+        <!-- Analysis Results Display -->
+        <v-card v-if="analysisResults.length > 0" class="mb-4">
+          <v-card-title>Analysis Results</v-card-title>
+          <v-card-text>
+            <v-list>
+              <v-list-item v-for="(result, index) in analysisResults" :key="index">
+                <v-list-item-title>{{ result.type }} Result</v-list-item-title>
+                <v-list-item-subtitle>{{ result.summary }}</v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
+        </v-card>
+      </v-container>
     </v-main>
-    <v-dialog v-model="openFileDialog" width="500">
-      <v-card>
-        <v-card-title>Open File</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="selectedFile"
-            label="Selected File"
-            readonly
-            @click="fileInput?.click()"
-          ></v-text-field>
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".h5ad"
-            style="display: none;"
-            @change="handleFileSelect"
-          />
-          <v-select
-            v-model="selectedModel"
-            :items="modelItems"
-            label="Select Model"
-            item-title="title"
-            item-value="id"
-            :loading="loadingModels"
-            :disabled="loadingModels"
-          ></v-select>
-        </v-card-text>
-        <v-card-actions>
-          <v-progress-linear
-            v-model="predictionProgress"
-            height="25"
-            color="primary"
-          >
-            <template v-slot:default>
-              <strong>{{ Math.ceil(predictionProgress) }}%</strong>
-            </template>
-          </v-progress-linear>
-          <v-spacer></v-spacer>
-          <v-btn @click="openFileDialog = false">Close</v-btn>
-          <v-btn
-            color="primary"
-            @click="handlePredict"
-            :disabled="!selectedModel || !selectedFile"
-          >
-            Predict
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </v-app>
 </template>
 
@@ -69,85 +88,169 @@
 import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-interface Model {
-  id: string
-  title: string
-  description?: string
-  version?: string
-  metadata?: Record<string, unknown>
-}
-
 const theme = useTheme()
-const openFileDialog = ref(false)
-const loadingModels = ref(true)
-const selectedModel = ref<string>('')
-const models = ref<Record<string, Model>>({})
-const modelItems = ref<Model[]>([])
+const isProcessing = ref(false)
+const currentStatus = ref('')
+
+// Available files and workers
+const fileOptions = ref(['sample.h5ad', 'pbmc.h5ad', 'brain.h5ad'])
+const fileWorkerOptions = ref(['H5AD File Loader'])
+const analysisWorkerOptions = ref(['Average Calculator', 'Min/Max Calculator'])
+
+// Selected options
 const selectedFile = ref('sample.h5ad')
-const fileInput = ref<HTMLInputElement | null>(null)
-const predictionProgress = ref(0)
-const worker = ref<Worker | null>(null)
+const selectedFileWorker = ref('H5AD File Loader')
+const selectedAnalysisWorker = ref('Average Calculator')
 
-async function loadModels() {
-  try {
-    loadingModels.value = true
-    worker.value = new Worker(new URL('./worker.js', import.meta.url))
-    
-    worker.value.onmessage = (event) => {
-      if (event.data.type === 'predictionProgress') {
-        predictionProgress.value = (event.data.countFinished / event.data.totalToProcess) * 100
-      }
-    }
-    const modelsResponse = await fetch('/models/models.txt')
-    const modelsText = await modelsResponse.text()
-    const modelIds = modelsText.trim().split('\n')
+// Workers
+const fileWorker = ref<Worker | null>(null)
+const processingWorker = ref<Worker | null>(null)
+const analysisWorker = ref<Worker | null>(null)
 
-    const modelPromises = modelIds.map(async (id) => {
-      const response = await fetch(`/models/${id}.json`)
-      const modelData = await response.json()
-      return { id, ...modelData }
-    })
+// Results
+const fileStats = ref<{ numCells: number; numGenes: number } | null>(null)
+const analysisResults = ref<
+  Array<{
+    type: string
+    summary: string
+    detailedResult?: Float32Array
+    min?: Float32Array
+    max?: Float32Array
+  }>
+>([])
 
-    const modelList = await Promise.all(modelPromises)
-    models.value = Object.fromEntries(modelList.map(model => [model.id, model]))
-    modelItems.value = modelList
-  } catch (error) {
-    console.error('Error loading models:', error)
-  } finally {
-    loadingModels.value = false
-  }
-}
+// The batch size for processing
+const batchSize = ref(100)
 
 function toggleTheme() {
   theme.global.name.value = theme.global.current.value.dark ? 'light' : 'dark'
 }
 
-function handleFileSelect(event: Event) {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (file) {
-    selectedFile.value = file.name
-  }
+function initializeWorkers() {
+  // Create file worker
+  fileWorker.value = new Worker(new URL('./workers/fileWorker.js', import.meta.url))
+  fileWorker.value.onmessage = handleFileWorkerMessage
+
+  // Create processing worker
+  processingWorker.value = new Worker(new URL('./workers/processingWorker.js', import.meta.url))
+  processingWorker.value.onmessage = handleProcessingWorkerMessage
 }
 
-function handlePredict() {
-  if (!selectedModel.value || !selectedFile.value) return
-  
-  worker.value?.postMessage({
-    type: 'startPrediction',
-    modelID: selectedModel.value,
-    modelURL: '/models',
-    h5File: selectedFile.value,
-    cellRangePercent: 100
+function runPipeline() {
+  // Reset previous results
+  fileStats.value = null
+  analysisResults.value = []
+  isProcessing.value = true
+  currentStatus.value = 'Starting pipeline...'
+
+  // Initialize workers if needed
+  if (!fileWorker.value || !processingWorker.value) {
+    initializeWorkers()
+  }
+
+  // Create selected analysis worker based on selection
+  if (analysisWorker.value) {
+    analysisWorker.value.terminate()
+  }
+
+  if (selectedAnalysisWorker.value === 'Average Calculator') {
+    analysisWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
+    analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  } else {
+    analysisWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
+    analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  }
+
+  // Start the pipeline by sending a message to the file worker
+  fileWorker.value?.postMessage({
+    type: 'processFile',
+    file: selectedFile.value,
+    batchSize: batchSize.value,
   })
 }
 
+function handleFileWorkerMessage(event: MessageEvent) {
+  const { type, message } = event.data
+
+  if (type === 'status') {
+    currentStatus.value = message
+  } else if (type === 'fileStats') {
+    fileStats.value = {
+      numCells: event.data.numCells,
+      numGenes: event.data.numGenes,
+    }
+    currentStatus.value = message
+  } else if (type === 'batchData') {
+    // Pass the batch data to the processing worker
+    processingWorker.value?.postMessage({
+      type: 'processBatch',
+      batch: event.data.batch,
+      batchSize: event.data.batchSize,
+      numCells: event.data.numCells,
+      numGenes: event.data.numGenes,
+    })
+    currentStatus.value = message
+  } else if (type === 'error') {
+    currentStatus.value = message
+    isProcessing.value = false
+  }
+}
+
+function handleProcessingWorkerMessage(event: MessageEvent) {
+  const { type, message } = event.data
+
+  if (type === 'status') {
+    currentStatus.value = message
+  } else if (type === 'batchProcessed') {
+    // Pass the processed data to the selected analysis worker
+    if (selectedAnalysisWorker.value === 'Average Calculator') {
+      analysisWorker.value?.postMessage({
+        type: 'computeAverage',
+        batch: event.data.batch,
+        batchSize: event.data.batchSize,
+        numCells: event.data.numCells,
+        numGenes: event.data.numGenes,
+      })
+    } else {
+      analysisWorker.value?.postMessage({
+        type: 'computeMinMax',
+        batch: event.data.batch,
+        batchSize: event.data.batchSize,
+        numCells: event.data.numCells,
+        numGenes: event.data.numGenes,
+      })
+    }
+    currentStatus.value = message
+  } else if (type === 'error') {
+    currentStatus.value = message
+    isProcessing.value = false
+  }
+}
+
+function handleAnalysisWorkerMessage(event: MessageEvent) {
+  const { type, message } = event.data
+
+  if (type === 'status') {
+    currentStatus.value = message
+  } else if (type === 'analysisResult') {
+    analysisResults.value.push(event.data.result)
+    currentStatus.value = message
+    isProcessing.value = false
+  } else if (type === 'error') {
+    currentStatus.value = message
+    isProcessing.value = false
+  }
+}
+
 onMounted(() => {
-  loadModels()
+  initializeWorkers()
 })
 
 onUnmounted(() => {
-  worker.value?.terminate()
+  // Clean up workers
+  fileWorker.value?.terminate()
+  processingWorker.value?.terminate()
+  analysisWorker.value?.terminate()
 })
 </script>
 
@@ -155,7 +258,9 @@ onUnmounted(() => {
 @import '@mdi/font/css/materialdesignicons.min.css';
 
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
 }
 
 .v-application {

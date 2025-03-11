@@ -5,5 +5,5 @@ import { test, expect } from '@playwright/test'
 test('visits the app root url', async ({ page }) => {
   await page.goto('/')
   const title = await page.title()
-  expect(title).toBe('Cell Dimension')
+  expect(title).toBe('Cell Space')
 })

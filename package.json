@@ -1,5 +1,5 @@
 {
-  "name": "cell-dimension",
+  "name": "cell-space",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
+    "test": "vitest",
     "test:unit": "vitest",
     "test:e2e": "playwright test",
-    "test:ui": "playwright test --ui",
+    "test:ui": "playwright test --ui --debug",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint:oxlint": "oxlint . --fix -D correctness --ignore-path .gitignore",
