@@ -8,7 +8,7 @@
       <v-file-input
         v-model="selectedFile"
         accept=".h5ad"
-        label="Select H5AD File"
+        label="Select an h5ad File"
         variant="underlined"
         class="mx-2"
         style="max-width: 250px"
@@ -19,8 +19,8 @@
 
       <!-- First Worker Selector -->
       <v-select
-        v-model="selectedFileWorker"
-        :items="fileWorkerOptions"
+        v-model="selectedPredictWorker"
+        :items="predictWorkerOptions"
         label="File Worker"
         variant="underlined"
         class="mx-2"
@@ -31,8 +31,8 @@
 
       <!-- Second Worker Selector -->
       <v-select
-        v-model="selectedAnalysisWorker"
-        :items="analysisWorkerOptions"
+        v-model="selectedClusterWorker"
+        :items="clusterWorkerOptions"
         label="Analysis Worker"
         variant="underlined"
         class="mx-2"
@@ -51,11 +51,10 @@
       <v-container fluid>
         <!-- Status Display -->
         <v-card class="mb-4">
-          <v-card-title>Pipeline Status</v-card-title>
           <v-card-text>
             <v-progress-linear
               v-if="isProcessing"
-              :model-value="predictionProgress"
+              :model-value="processingProgress"
               color="primary"
               height="10"
             ></v-progress-linear>
@@ -99,24 +98,25 @@ import SIMSWorker from './workers/sims-worker?worker'
 const theme = useTheme()
 const isProcessing = ref(false)
 const currentStatus = ref('')
-const predictionProgress = ref(0)
+const processingProgress = ref(0)
 const processingTime = ref(0)
 const processingStartTime = ref(0)
 
 // Model metadata type
 interface ModelMetadata {
   title: string
+  submitter: string
   [key: string]: unknown
 }
 
 // Available files and workers
-const fileWorkerOptions = ref<{ title: string; value: string }[]>([])
-const analysisWorkerOptions = ref(['Average Calculator', 'Min/Max Calculator'])
+const predictWorkerOptions = ref<{ title: string; value: string }[]>([])
+const clusterWorkerOptions = ref(['UMAP', 'PUMAP', 'HDBSCAN'])
 
 // Selected options
 const selectedFile = ref<File | null>(null)
-const selectedFileWorker = ref('')
-const selectedAnalysisWorker = ref('Average Calculator')
+const selectedPredictWorker = ref('default')
+const selectedClusterWorker = ref('UMAP')
 
 // Model metadata
 const modelMetadata = ref<Record<string, ModelMetadata>>({})
@@ -136,15 +136,10 @@ async function fetchModels() {
     }
 
     modelMetadata.value = metadata
-    fileWorkerOptions.value = modelIds.map((id) => ({
+    predictWorkerOptions.value = modelIds.map((id) => ({
       title: metadata[id].title || id,
       value: id,
     }))
-
-    // Set default selection if available
-    if (fileWorkerOptions.value.length > 0) {
-      selectedFileWorker.value = 'default'
-    }
   } catch (error) {
     console.error('Error fetching models:', error)
     currentStatus.value = 'Error loading models'
@@ -152,9 +147,9 @@ async function fetchModels() {
 }
 
 // Workers
-const fileWorker = ref<Worker | null>(null)
+const predictWorker = ref<Worker | null>(null)
 const processingWorker = ref<Worker | null>(null)
-const analysisWorker = ref<Worker | null>(null)
+const clusterWorker = ref<Worker | null>(null)
 
 // Results
 const fileStats = ref<{ numCells: number; numGenes: number } | null>(null)
@@ -212,8 +207,8 @@ async function loadDataset() {
 
 function initializeWorkers() {
   // Create file worker
-  fileWorker.value = new SIMSWorker()
-  fileWorker.value.onmessage = handleFileWorkerMessage
+  predictWorker.value = new SIMSWorker()
+  predictWorker.value.onmessage = handlePredictWorkerMessage
 
   // Create processing worker
   // processingWorker.value = new Worker(new URL('./workers/processingWorker.js', import.meta.url))
@@ -232,32 +227,32 @@ function runPipeline() {
   analysisResults.value = []
   isProcessing.value = true
   currentStatus.value = 'Starting pipeline...'
-  predictionProgress.value = 0
+  processingProgress.value = 0
   processingStartTime.value = Date.now()
 
   // Initialize workers if needed
-  if (!fileWorker.value || !processingWorker.value) {
+  if (!predictWorker.value || !processingWorker.value) {
     initializeWorkers()
   }
 
   // Create selected analysis worker based on selection
-  if (analysisWorker.value) {
-    analysisWorker.value.terminate()
+  if (clusterWorker.value) {
+    clusterWorker.value.terminate()
   }
 
-  // if (selectedAnalysisWorker.value === 'Average Calculator') {
-  //   analysisWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
-  //   analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  // if (selectedClusterWorker.value === 'Average Calculator') {
+  //   clusterWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
+  //   clusterWorker.value.onmessage = handleClusterWorkerMessage
   // } else {
-  //   analysisWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
-  //   analysisWorker.value.onmessage = handleAnalysisWorkerMessage
+  //   clusterWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
+  //   clusterWorker.value.onmessage = handleClusterWorkerMessage
   // }
 
   // Start the pipeline by sending a message to the file worker
   const modelURL = `${window.location.protocol}//${window.location.host}/models`
-  fileWorker.value?.postMessage({
+  predictWorker.value?.postMessage({
     type: 'startPrediction',
-    modelID: selectedFileWorker.value,
+    modelID: selectedPredictWorker.value,
     modelURL: modelURL,
     h5File: selectedFile.value,
     cellRangePercent: 25,
@@ -275,7 +270,7 @@ function handleFileSelected(files: File | File[]) {
   }
 }
 
-function handleFileWorkerMessage(event: MessageEvent) {
+function handlePredictWorkerMessage(event: MessageEvent) {
   const { type, message } = event.data
 
   if (type === 'status') {
@@ -296,18 +291,18 @@ function handleFileWorkerMessage(event: MessageEvent) {
       numGenes: event.data.numGenes,
     })
     currentStatus.value = message
-  } else if (type === 'predictionProgress') {
+  } else if (type === 'processingProgress') {
     // Update progress based on countFinished and totalToProcess
     const { countFinished, totalToProcess } = event.data
-    predictionProgress.value = (countFinished / totalToProcess) * 100
-    currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(predictionProgress.value)}%)`
+    processingProgress.value = (countFinished / totalToProcess) * 100
+    currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'finishedPrediction') {
     // Calculate processing time
     processingTime.value = (Date.now() - processingStartTime.value) / 1000
 
     // Reset UI state
     isProcessing.value = false
-    predictionProgress.value = 0
+    processingProgress.value = 0
     currentStatus.value = ''
 
     // Add processing result to analysis results
@@ -328,8 +323,8 @@ function handleFileWorkerMessage(event: MessageEvent) {
 //     currentStatus.value = message
 //   } else if (type === 'batchProcessed') {
 //     // Pass the processed data to the selected analysis worker
-//     if (selectedAnalysisWorker.value === 'Average Calculator') {
-//       analysisWorker.value?.postMessage({
+//     if (selectedClusterWorker.value === 'Average Calculator') {
+//       clusterWorker.value?.postMessage({
 //         type: 'computeAverage',
 //         batch: event.data.batch,
 //         batchSize: event.data.batchSize,
@@ -337,7 +332,7 @@ function handleFileWorkerMessage(event: MessageEvent) {
 //         numGenes: event.data.numGenes,
 //       })
 //     } else {
-//       analysisWorker.value?.postMessage({
+//       clusterWorker.value?.postMessage({
 //         type: 'computeMinMax',
 //         batch: event.data.batch,
 //         batchSize: event.data.batchSize,
@@ -352,7 +347,7 @@ function handleFileWorkerMessage(event: MessageEvent) {
 //   }
 // }
 
-// function handleAnalysisWorkerMessage(event: MessageEvent) {
+// function handleClusterWorkerMessage(event: MessageEvent) {
 //   const { type, message } = event.data
 
 //   if (type === 'status') {
@@ -395,9 +390,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   // Clean up workers
-  fileWorker.value?.terminate()
+  predictWorker.value?.terminate()
   processingWorker.value?.terminate()
-  analysisWorker.value?.terminate()
+  clusterWorker.value?.terminate()
 })
 </script>
 

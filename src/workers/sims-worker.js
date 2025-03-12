@@ -15,7 +15,7 @@
  * }
  *
  * The worker will then download the model, h5ad file, and run the prediction
- * and store the results in IndexedDB. It will send "predictionProgress" messages to the
+ * and store the results in IndexedDB. It will send "processingProgress" messages to the
  * main thread to update the progress bar and "finishedPrediction" message when done.
  * If an error occurs, it will send an "predictionError" message with the error.
  *
@@ -135,7 +135,7 @@ async function instantiateModel(modelURL, modelID) {
 
     // Send progress update to the main thread
     self.postMessage({
-      type: 'predictionProgress',
+      type: 'processingProgress',
       message: 'Downloading model...',
       countFinished: loadedBytes,
       totalToProcess: totalBytes,
@@ -451,7 +451,7 @@ async function predict(modelID, modelURL, h5File, cellRangePercent) {
 
       // Post progress update
       self.postMessage({
-        type: 'predictionProgress',
+        type: 'processingProgress',
         message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
         countFinished: nextStart,
         totalToProcess: cellNames.length,
@@ -487,7 +487,7 @@ async function predict(modelID, modelURL, h5File, cellRangePercent) {
       coordinates = await umap.fitAsync(encodings, (epochNumber) => {
         // check progress and give user feedback, or return `false` to stop
         self.postMessage({
-          type: 'predictionProgress',
+          type: 'processingProgress',
           message: `Computing the first ${encodings.length} coordinates...`,
           countFinished: epochNumber,
           totalToProcess: umap.getNEpochs(),
