@@ -1,3 +1,7 @@
+venv
+data
+checkpoints
+
 # Logs
 logs
 *.log
