@@ -75,23 +75,6 @@ if __name__ == "__main__":
         f.write("\n".join(map(str, sims.model.label_encoder.classes_)))
     print(f"Wrote out gene and classes lists to {model_path}/{model_id}.genes/.classes")
 
-    # Output a list of all models to populate the model selection drop down
-    with open(f"{model_path}/models.txt", "w") as f:
-        f.write(
-            "\n".join(
-                sorted(
-                    list(
-                        set(
-                            f.split(".")[0]
-                            for f in os.listdir(model_path)
-                            if f != "models.txt" and f != ".DS_Store"
-                        )
-                    )
-                )
-            )
-        )
-    print(f"Wrote out list of all models to {model_path}/models.txt")
-
     """
     Build an onnx graph with post processing steps to match the SIMS model.
     See https://github.com/scailable/sclblonnx/tree/master/examples
