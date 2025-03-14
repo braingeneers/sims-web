@@ -42,32 +42,18 @@ def encode(
     """
     typer.echo(f"Encoding samples from {sample_path} using model {encoder_model_path}")
     
-    # Load the encoder model
+    # Instantiate the encoder model
     encoder_session = ort.InferenceSession(str(encoder_model_path))
-    input_name = encoder_session.get_inputs()[0].name
-    output_name = encoder_session.get_outputs()[0].name
     
-    # Get model input shape to determine the expected genes
+    # # Get model input shape to determine the expected genes
     input_shape = encoder_session.get_inputs()[0].shape
     model_input_size = input_shape[1] if len(input_shape) > 1 else input_shape[0]
     
     # Load the sample data
     adata = ad.read_h5ad(sample_path)
     
-    # Extract genes from the sample file
-    genes_file = sample_path.with_suffix('.genes')
-    if genes_file.exists():
-        with open(genes_file, 'r') as f:
-            sample_genes = [line.strip() for line in f]
-    else:
-        # If no genes file, try to get them from the adata object
-        if hasattr(adata, 'var_names'):
-            sample_genes = list(adata.var_names)
-        else:
-            raise FileNotFoundError(f"Gene list file {genes_file} not found and could not extract genes from adata object")
-    
     # Create an inflation mapping between model genes and sample genes
-    inflation_map = create_inflation_map(model_input_size, sample_genes)
+    inflation_map = create_inflation_map(adata, encoder_model_path)
     
     # Limit the number of samples
     num_cells = min(adata.n_obs, num_samples)
@@ -78,91 +64,82 @@ def encode(
     
     # Process in batches
     with tqdm(total=num_cells) as pbar:
+        # Create a zero inflated data batch. We assume that each sample has the same
+        # genes so we don't need to re-allocate this everytime, just inflate into it.
+        inflated_batch = np.zeros((batch_size, model_input_size), dtype=np.float32)
+
         for batch_start in range(0, num_cells, batch_size):
             batch_end = min(batch_start + batch_size, num_cells)
             batch_size_actual = batch_end - batch_start
-            
+
             # Get batch of expression data
             batch_expression = adata.X[batch_start:batch_end]
-            
-            # Convert to dense if it's sparse
-            if isinstance(batch_expression, np.ndarray) == False:
-                batch_expression = batch_expression.toarray()
-            
-            # Apply inflation mapping
-            inflated_expression = apply_inflation_map(batch_expression, inflation_map)
-            
+
+            # Handle last batch if its smaller then batch_size
+            if batch_size_actual < batch_size:
+                inflated_batch = np.zeros((batch_size_actual, model_input_size), dtype=np.float32)
+
+            # # Convert to dense if it's sparse
+            # if isinstance(batch_expression, np.ndarray) == False:
+            #     batch_expression = batch_expression.toarray()
+
+            # Fill in the data using the inflation map
+            for sample_idx, model_idx in inflation_map.items():
+                inflated_batch[:, model_idx] = batch_expression[:, sample_idx]
+
             # Run the model
-            model_input = {input_name: inflated_expression.astype(np.float32)}
-            batch_encodings = encoder_session.run([output_name], model_input)[0]
-            
+            model_input = {"input": inflated_batch.astype(np.float32)}
+            batch_encodings = encoder_session.run(["encoding"], model_input)[0]
+
             # Store the encodings
             encodings.append(batch_encodings)
-            
+
             pbar.update(batch_size_actual)
-    
+
     # Combine all batches
     all_encodings = np.vstack(encodings)
-    
+
     # Save the encodings
     output_path = sample_path.with_name(f"{sample_path.stem}-encodings.npy")
     np.save(output_path, all_encodings)
-    
+
     typer.echo(f"Saved encodings to {output_path}")
 
 
-def create_inflation_map(model_input_size: int, sample_genes: List[str]) -> Dict[int, int]:
+def create_inflation_map(adata, encoder_model_path: str) -> Dict[int, int]:
     """
     Create a mapping between the model's expected gene indices and the sample's gene indices.
     
     Args:
-        model_input_size: Number of genes expected by the model
-        sample_genes: List of gene names in the sample
+        adata: AnnData sample
+        encoder_model_path: Path to the encoder model
         
     Returns:
         Dictionary mapping from sample gene indices to model gene indices
     """
-    # For a proper implementation, we would need a list of genes expected by the model
-    # Since we don't have that information, we assume a direct mapping for genes that exist
-    # and zeros for those that don't
-    
-    # This is a simplified approach - in a real scenario, we would map gene names
+    # Load the model genes
+    model_genes_path = Path(encoder_model_path).with_suffix('.genes')
+    with open(model_genes_path, 'r') as f:
+        model_genes = [line.strip() for line in f]
+
+    # Create a mapping from gene names to indices for the model
+    model_gene_to_idx = {gene: idx for idx, gene in enumerate(model_genes)}
+
+    # Get the sample genes
+    sample_genes = adata.var_names.tolist() 
+
+    # Create the inflation map: sample index -> model index
     inflation_map = {}
     
-    # Use direct mapping for now (assuming same order of genes)
-    # In a real scenario, you would match by gene name
-    for i in range(min(len(sample_genes), model_input_size)):
-        inflation_map[i] = i
+    # For each gene in the sample, find its index in the model
+    for sample_idx, gene_name in enumerate(sample_genes):
+        if gene_name in model_gene_to_idx:
+            # If the gene exists in the model, add it to the mapping
+            model_idx = model_gene_to_idx[gene_name]
+            inflation_map[sample_idx] = model_idx
     
+    print(f"{adata.X.shape[1] - len(inflation_map)} genes in the sample and not in the model")
     return inflation_map
-
-
-def apply_inflation_map(
-    expression_data: np.ndarray, inflation_map: Dict[int, int]
-) -> np.ndarray:
-    """
-    Apply an inflation mapping to expression data to match the model's expected input format.
-    
-    Args:
-        expression_data: Expression data matrix (samples x genes)
-        inflation_map: Mapping from sample gene indices to model gene indices
-        
-    Returns:
-        Inflated expression data matrix matching model's expected dimensions
-    """
-    num_samples = expression_data.shape[0]
-    model_input_size = max(inflation_map.values()) + 1
-    
-    # Create zero matrix with model's expected dimensions
-    inflated_data = np.zeros((num_samples, model_input_size), dtype=expression_data.dtype)
-    
-    # Fill in the data using the inflation map
-    for sample_idx, model_idx in inflation_map.items():
-        if sample_idx < expression_data.shape[1]:
-            inflated_data[:, model_idx] = expression_data[:, sample_idx]
-    
-    return inflated_data
-
 
 class HDBSCANModule(nn.Module):
     """
