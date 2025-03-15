@@ -78,6 +78,46 @@
             </v-list>
           </v-card-text>
         </v-card>
+
+        <!-- Predictions Plot -->
+        <v-card v-if="resultsDB" class="mb-4">
+          <v-card-title>Analysis Results</v-card-title>
+          <v-card-text>
+            <predictions-plot
+              :width="450"
+              :height="450"
+              :labels="resultsDB.cellTypes"
+              :coordinates="resultsDB.coords"
+            ></predictions-plot>
+          </v-card-text>
+        </v-card>
+
+        <!-- Predictions Sankey -->
+        <v-card v-if="resultsDB" class="mb-4">
+          <v-card-title>Analysis Results</v-card-title>
+          <v-card-text>
+            <predictions-sankey
+              :cell-types="resultsDB.cellTypes"
+              :cell-type-names="resultsDB.cellTypeNames"
+              :top-gene-indices-by-class="resultsDB.topGeneIndicesByClass"
+              :genes="resultsDB.genes"
+            ></predictions-sankey>
+          </v-card-text>
+        </v-card>
+
+        <!-- Predictions Table -->
+        <v-card v-if="resultsDB" class="mb-4">
+          <v-card-title>Analysis Results</v-card-title>
+          <v-card-text>
+            <predictions-table
+              :cell-names="resultsDB.cellNames"
+              :predictions="resultsDB.predictions"
+              :probabilities="resultsDB.probabilities"
+              :cell-type-names="resultsDB.cellTypeNames"
+              :coordinates="resultsDB.coords"
+            ></predictions-table>
+          </v-card-text>
+        </v-card>
       </v-container>
     </v-main>
   </v-app>
@@ -85,10 +125,14 @@
 
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { defineComponent, ref, onMounted, onUnmounted, computed } from 'vue'
 
 import { openDB, IDBPDatabase } from 'idb'
-import SIMSWorker from './workers/sims-worker?worker'
+import SIMSWorker from './workers/sims-worker.js?worker'
+
+import PredictionsTable from './PredictionsTable.vue'
+import PredictionsPlot from './PredictionsPlot.vue'
+import PredictionsSankey from './PredictionsSankey.vue'
 
 const theme = useTheme()
 const isProcessing = ref(false)
