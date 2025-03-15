@@ -74,11 +74,11 @@
         </v-card>
 
         <!-- File Information Display -->
-        <v-card v-if="fileStats" class="mb-4">
-          <v-card-title>File Information</v-card-title>
+        <v-card v-if="resultsDB" class="mb-4">
+          <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
           <v-card-text>
-            <p><strong>Cells:</strong> {{ fileStats.numCells }}</p>
-            <p><strong>Genes:</strong> {{ fileStats.numGenes }}</p>
+            <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
+            {{ resultsDB.genes.length }}
           </v-card-text>
         </v-card>
 
@@ -208,7 +208,6 @@ const processingWorker = ref<Worker | null>(null)
 const clusterWorker = ref<Worker | null>(null)
 
 // Results
-const fileStats = ref<{ numCells: number; numGenes: number } | null>(null)
 const analysisResults = ref<
   Array<{
     type: string
@@ -279,7 +278,6 @@ function runPipeline() {
   }
 
   // Reset previous results
-  fileStats.value = null
   analysisResults.value = []
   isProcessing.value = true
   currentStatus.value = 'Starting pipeline...'
@@ -338,12 +336,6 @@ function handlePredictWorkerMessage(event: MessageEvent) {
   const { type, message } = event.data
 
   if (type === 'status') {
-    currentStatus.value = message
-  } else if (type === 'fileStats') {
-    fileStats.value = {
-      numCells: event.data.numCells,
-      numGenes: event.data.numGenes,
-    }
     currentStatus.value = message
   } else if (type === 'batchData') {
     // Pass the batch data to the processing worker

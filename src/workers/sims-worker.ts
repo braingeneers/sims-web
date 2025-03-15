@@ -639,6 +639,7 @@ async function predict(
       cellNames,
       predictions: labels.map((label) => label[0]),
       probabilities: labels.map((label) => label[1]),
+      encodings: encodings.flat(),
     })
     await tx.done
     db.close()
