@@ -4,6 +4,44 @@
  * - Cell type predictions with probabilities
  * - Ranked genes per class that explain the prediction (based on attention)
  * - UMAP coordinates for each cell
+ *
+ * To start prediction, the worker expects a message with the following data:
+ * {
+ *   type: "startPrediction",
+ *   modelID: "model_id",
+ *   modelURL: "model_url",
+ *   h5File: File,
+ *   cellRangePercent: 100
+ * }
+ *
+ * The worker will then download the model, h5ad file, and run the prediction
+ * and store the results in IndexedDB. It will send "processingProgress" messages to the
+ * main thread to update the progress bar and "finishedPrediction" message when done.
+ * If an error occurs, it will send an "predictionError" message with the error.
+ *
+ * The results are stored in IndexedDB with the following schema:
+ * {
+ *   datasetLabel: "dataset_label",
+ *   coords: Float32Array, // 2D UMAP coordinates
+ *   cellTypeNames: Array, // Array of cell type names
+ *   cellTypes: Array, // Array of cell type indices
+ *   modelID: "model_id",
+ *   topGeneIndicesByClass: Array, // Array of top gene indices per class
+ *   genes: Array, // Array of gene names
+ *   overallTopGenes: Array, // Array of top gene indices overall
+ *   cellNames: Array, // Array of cell names
+ *   predictions: Array, // Array of cell type predictions
+ *   probabilities: Array // Array of prediction probabilities
+ * }
+ *
+ * The h5 file is read using h5wasm which is a WebAssembly of the h5 library.
+ * We utilize its ability to map the file into the browsers file system and
+ * thereby read the gene expression data incrementally to support unlimited
+ * file sizes. Note this requires the expression data to be stores in
+ * column-major order - which most h5ad files are.
+ *
+ * The prediction is run in multiple threads fed by filling double buffers
+ * from the h5 file in a separate thread towards keeping all the threads busy.
  */
 import h5wasm from 'h5wasm'
 import Prando from 'prando'
@@ -11,63 +49,114 @@ import * as UMAP from 'umap-js'
 import * as ort from 'onnxruntime-web'
 import { openDB } from 'idb'
 
-// Define interfaces for TypeScript
-interface WorkerModel {
+// Define TypeScript interfaces for the worker's data structures
+interface ModelInfo {
   modelID: string
   session: ort.InferenceSession
   genes: string[]
   classes: string[]
 }
 
-interface PredictionResult {
-  datasetLabel: string
-  coords: Float32Array
-  cellTypeNames: string[]
-  cellTypes: number[]
-  modelID: string
-  topGeneIndicesByClass: number[][]
-  genes: string[]
-  overallTopGenes: number[]
-  cellNames: string[]
-  predictions: number[][]
-  probabilities: Float32Array[]
+interface Buffer {
+  size: number
+  data: Float32Array
 }
 
-// Extend the self object for TypeScript
-declare global {
-  interface Worker {
-    model: WorkerModel | null
-    numExplainGenes: number
-    attentionAccumulators: number[][] | null
-    numThreads: number
-    batchSize: number
-    maxNumCellsToUMAP: number
-  }
+interface PredictionMessage {
+  type: 'startPrediction'
+  modelID: string
+  modelURL: string
+  h5File: File
+  cellRangePercent: number
 }
+
+interface StatusMessage {
+  type: 'status'
+  message: string
+}
+
+interface ProgressMessage {
+  type: 'processingProgress'
+  message: string
+  countFinished: number
+  totalToProcess: number
+}
+
+interface FinishedMessage {
+  type: 'finishedPrediction'
+  datasetLabel: string
+  elapsedTime: number
+  totalProcessed: number
+  totalNumCells: number
+}
+
+interface ErrorMessage {
+  type: 'predictionError'
+  error: any
+}
+
+type WorkerMessage = PredictionMessage
+type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
+
+interface H5DataSet {
+  type: string
+  value: any
+  shape: number[]
+  keys(): string[]
+  slice(ranges: any[][]): any
+}
+
+interface H5Group {
+  type: string
+  keys(): string[]
+  get(path: string): H5DataSet | H5Group
+}
+
+interface H5File {
+  keys(): string[]
+  get(path: string): H5DataSet | H5Group
+  close(): void
+}
+
+interface ModelOutput {
+  topk_indices: ort.Tensor
+  probs: ort.Tensor
+  encoding: ort.Tensor
+  attention: ort.Tensor
+}
+
+// Declare worker scope variables with proper types
+declare const self: DedicatedWorkerGlobalScope
 
 // Dictionary with various model information (id, genes, session)
-self.model = null
+self.model = null as ModelInfo | null
 
 // Top number of genes to return to explain per class (i.e. Top K)
 self.numExplainGenes = 10
 
 // #classes x #genes matrix to accumulate attention for explaining predictions
-self.attentionAccumulators = null
+self.attentionAccumulators = null as Float32Array | null
 
 // Number of threads to use for inference. Use all but one for the GUI to run in
 self.numThreads = navigator.hardwareConcurrency - 1
 
-// Batch size based on available threads
+// Tuned batch size - if I/O, pre-processing and inflation is fast relative to
+// the model inference then increase the batch size so that inference is never
+// waiting on data. If the model is very large and inference is slow then
+// reduce the batch size so that inference can be parallelized across more
+// threads. The ONNX model supports variable size batches which plays into
+// this as well.
 self.batchSize = self.numThreads - 1
+
+// Limit how many UMAP points we calculate which limits memory by limiting the
+// encoding vectors we keep around
+self.maxNumCellsToUMAP = 2000
 
 console.log(`Number of threads: ${self.numThreads}`)
 console.log(`Batch size: ${self.batchSize}`)
 
-// Limit how many UMAP points we calculate
-self.maxNumCellsToUMAP = 2000
-
 // Handle messages from the main thread
-self.addEventListener('message', async function (event: MessageEvent) {
+self.addEventListener('message', async function (event: MessageEvent<WorkerMessage>) {
   if (event.data.type === 'startPrediction') {
     predict(event.data.modelID, event.data.modelURL, event.data.h5File, event.data.cellRangePercent)
   }
@@ -75,8 +164,11 @@ self.addEventListener('message', async function (event: MessageEvent) {
 
 /**
  * Create an ONNX Runtime session for the selected model
+ * @param {string} modelURL - The URL of the model
+ * @param {string} modelID - The id of the model to load
+ * @returns {Promise<ModelInfo>} - A promise that resolves to a model session dictionary
  */
-async function instantiateModel(modelURL: string, modelID: string): Promise<WorkerModel> {
+async function instantiateModel(modelURL: string, modelID: string): Promise<ModelInfo> {
   console.log(`Instantiating model ${modelID} from ${modelURL}`)
   self.postMessage({ type: 'status', message: 'Downloading model...' })
 
@@ -120,7 +212,7 @@ async function instantiateModel(modelURL: string, modelID: string): Promise<Work
 
     // Send progress update to the main thread
     self.postMessage({
-      type: 'predictionProgress',
+      type: 'processingProgress',
       message: 'Downloading model...',
       countFinished: loadedBytes,
       totalToProcess: totalBytes,
@@ -140,22 +232,25 @@ async function instantiateModel(modelURL: string, modelID: string): Promise<Work
   // See https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html
   ort.env.wasm.numThreads = self.numThreads
   ort.env.wasm.proxy = true
-  ort.env.debug = true
-  ort.env.logLevel = 'verbose'
   const options: ort.InferenceSession.SessionOptions = {
-    executionProviders: ['wasm'],
+    executionProviders: ['wasm'], // alias of 'cpu'
     executionMode: 'parallel',
   }
 
-  // Create the InferenceSession with the model ArrayBuffer
+  // Create the InferenceSession with the model ArrayBuffer we fetched incrementally
   const session = await ort.InferenceSession.create(modelArray.buffer, options)
   console.log('Model Output names', session.outputNames)
 
   return { modelID, session, genes, classes }
 }
 
-/**
+/*
  * Precompute the inflation indices for the sample gene list
+ * @param {string[]} currentModelGenes - The gene list of the model
+ * @param {string[]} sampleGenes - The gene list of the sample
+ * @returns {number[]} - The inflation indices
+ * These are used in fillBatchData inflate each sample from sample gene list space
+ * into the model's gene list space
  */
 function precomputeInflationIndices(currentModelGenes: string[], sampleGenes: string[]): number[] {
   const inflationIndices: number[] = []
@@ -169,46 +264,69 @@ function precomputeInflationIndices(currentModelGenes: string[], sampleGenes: st
 
 /**
  * Fill the batch data and inflate it into the model's gene list space
+ * @param {number} batchStart - The start index of the batch
+ * @param {number} currentBatchSize - The size of the batch
+ * @param {H5DataSet} data - The data array
+ * @param {H5DataSet} indices - The indices array
+ * @param {H5DataSet} indptr - The indptr array
+ * @param {boolean} isSparse - Whether the data is sparse
+ * @param {string[]} sampleGenes - The gene list of the sample
+ * @param {number[]} inflationIndices - The inflation indices
+ * @param {Float32Array} inflatedBatchData - The inflated batch data
+ * This function fills the batch data and inflates it into the model's gene list space
+ * in one step. It also handles both sparse and non-sparse data.
  */
 function fillBatchData(
   batchStart: number,
   currentBatchSize: number,
-  data: Float32Array | Float64Array,
-  indices: Uint32Array | Int32Array | null,
-  indptr: Uint32Array | Int32Array | null,
+  data: H5DataSet,
+  indices: H5DataSet | null,
+  indptr: H5DataSet | null,
   isSparse: boolean,
   sampleGenes: string[],
   inflationIndices: number[],
-  encodings: Float32Array,
-  numGenes: number,
+  inflatedBatchData: Float32Array,
 ): void {
-  for (let i = 0; i < currentBatchSize; i++) {
-    const cellIndex = batchStart + i
-    const batchOffset = i * numGenes
+  // Fill batchData and inflate in one step
+  for (let batchSlot = 0; batchSlot < currentBatchSize; batchSlot++) {
+    const cellIndex = batchStart + batchSlot
+    const batchOffset = batchSlot * self.model!.genes.length
 
-    // Initialize batch data
-    for (let j = 0; j < numGenes; j++) {
-      encodings[batchOffset + j] = 0.0
-    }
-
-    // Inflate sparse or dense data
     if (isSparse) {
-      // Handle sparse data format
-      const start = indptr![cellIndex]
-      const end = indptr![cellIndex + 1]
-      for (let j = start; j < end; j++) {
-        const geneIndex = indices![j]
-        const targetIndex = inflationIndices[geneIndex]
-        if (targetIndex !== -1) {
-          encodings[batchOffset + targetIndex] = data[j]
+      // Sparse data stored column major
+      const [start, end] = indptr!.slice([[cellIndex, cellIndex + 2]])
+      const values = data.slice([[start, end]])
+      const valueIndices = indices!.slice([[start, end]])
+
+      for (let j = 0; j < valueIndices.length; j++) {
+        const sampleIndex = inflationIndices[valueIndices[j]]
+        if (sampleIndex !== -1) {
+          inflatedBatchData[batchOffset + sampleIndex] = values[j]
         }
       }
     } else {
-      // Handle dense data format
+      // Non-sparse stored column major
+      // Load up an intermediate buffer with h5wasm slice so we don't
+      // call into h5wasm for every value
+      let sampleExpression: any = null
+      if (data.shape.length === 1) {
+        // Direct 1D dense array mapping
+        sampleExpression = data.slice([
+          [cellIndex * sampleGenes.length, (cellIndex + 1) * sampleGenes.length],
+        ])
+      } else if (data.shape.length === 2) {
+        // Direct 2D matrix mapping
+        sampleExpression = data.slice([
+          [cellIndex, cellIndex + 1],
+          [0, sampleGenes.length],
+        ])
+      } else {
+        throw new Error('Unsupported data shape')
+      }
       for (let geneIndex = 0; geneIndex < sampleGenes.length; geneIndex++) {
-        const targetIndex = inflationIndices[geneIndex]
-        if (targetIndex !== -1) {
-          encodings[batchOffset + targetIndex] = data[cellIndex * sampleGenes.length + geneIndex]
+        const sampleIndex = inflationIndices[geneIndex]
+        if (sampleIndex !== -1) {
+          inflatedBatchData[batchOffset + sampleIndex] = sampleExpression[geneIndex]
         }
       }
     }
@@ -217,6 +335,11 @@ function fillBatchData(
 
 /**
  * Run the prediction on the model and store the results in IndexedDB
+ * @param {string} modelID - The id of the model
+ * @param {string} modelURL - The URL of the model
+ * @param {File} h5File - The h5ad file
+ * @param {number} cellRangePercent - The percentage of cells to process
+ * When finished, it sends a "finishedPrediction" message to the main thread.
  */
 async function predict(
   modelID: string,
@@ -224,259 +347,312 @@ async function predict(
   h5File: File,
   cellRangePercent: number,
 ): Promise<void> {
+  self.postMessage({ type: 'status', message: 'Loading libraries...' })
+  const Module = await h5wasm.ready
+  const { FS } = Module
+  console.log('h5wasm loaded')
+
   try {
-    // Load the model via ONNX Runtime
+    // Load the model if it's not already loaded
     if (!self.model || self.model.modelID !== modelID) {
       self.model = await instantiateModel(modelURL, modelID)
     }
 
-    // Reset our attention matrix to record attention for the top K genes
-    // per class that explain the prediction
-    const numClasses = self.model.classes.length
-    const numGenes = self.model.genes.length
-    self.attentionAccumulators = Array(numClasses)
-      .fill(0)
-      .map(() => Array(numGenes).fill(0))
+    // Reset attention accumulators
+    self.attentionAccumulators = new Float32Array(
+      self.model.classes.length * self.model.genes.length,
+    )
 
-    // Initialize the h5wasm file system
-    const Module = await h5wasm.ready
-    const { FS } = Module
-    console.log('h5wasm loaded')
+    // Load the h5ad file mapping it to the /work directory so we can read
+    // it with h5wasm incrementally to support unlimited file sizes
+    // We also figure out the list of genes in the sample and the list of cell names
+    self.postMessage({ type: 'status', message: 'Loading file' })
+    if (!FS.analyzePath('/work').exists) {
+      FS.mkdir('/work')
+    }
     FS.mount(FS.filesystems.WORKERFS, { files: [h5File] }, '/work')
 
-    // Open the h5ad file
-    self.postMessage({ type: 'status', message: 'Opening h5ad file...' })
-    const h5 = new h5wasm.File(h5File.name, 'r')
+    const annData = new h5wasm.File(`/work/${h5File.name}`, 'r') as H5File
+    console.log(annData)
 
-    // Get various dataset attributes
-    const obsNames = h5.get('obs/_index').value as string[]
-    const varNames = h5.get('var/_index').value as string[]
-    const shape = h5.get('X/shape').value
+    console.log(`Top level keys: ${annData.keys()}`)
 
-    // Determine if the data is stored in a sparse or dense format
-    const isSparse = h5.get('X/data') !== null
-
-    const totalNumCells = shape[0]
-    const totalNumGenes = shape[1]
-    console.log(`H5ad file has shape: ${totalNumCells} cells x ${totalNumGenes} genes`)
-
-    // Apply cell range percent to limit the number of cells to process
-    const numCellsToProcess = Math.floor((totalNumCells * cellRangePercent) / 100)
-    console.log(`Processing ${numCellsToProcess} cells (${cellRangePercent}% of total)`)
-
-    // Get the dataset - based on whether it's sparse or dense
-    // If it's sparse use a CSR Matrix.
-    let data, indices, indptr
-    if (isSparse) {
-      data = h5.get('X/data').value
-      indices = h5.get('X/indices').value
-      indptr = h5.get('X/indptr').value
+    let cellNames: string[] = []
+    if (annData.get('obs').type == 'Dataset') {
+      cellNames = (annData.get('obs') as H5DataSet).value.map((e: any) => e[0])
+    } else if (annData.get('obs').type == 'Group') {
+      const obsGroup = annData.get('obs') as H5Group
+      if (obsGroup.keys().includes('index')) {
+        cellNames = (obsGroup.get('index') as H5DataSet).value
+      } else if (obsGroup.keys().includes('_index')) {
+        cellNames = (obsGroup.get('_index') as H5DataSet).value
+      } else {
+        throw new Error('Could not find cell names')
+      }
     } else {
-      data = h5.get('X').value
+      throw new Error('Could not find cell names')
     }
 
-    // Create inflation indices to map h5ad genes to model genes
-    // Necessary since not all h5ad files have the same gene order
-    const inflationIndices = precomputeInflationIndices(self.model.genes, varNames)
+    let sampleGenes: string[] = []
+    if (annData.get('var').type == 'Dataset') {
+      sampleGenes = (annData.get('var') as H5DataSet).value.map((e: any) => e[0])
+    } else if (annData.get('var').type == 'Group') {
+      const varGroup = annData.get('var') as H5Group
+      if (varGroup.keys().includes('index')) {
+        sampleGenes = (varGroup.get('index') as H5DataSet).value
+      } else if (varGroup.keys().includes('_index')) {
+        sampleGenes = (varGroup.get('_index') as H5DataSet).value
+      } else {
+        throw new Error('Could not find genes')
+      }
+    } else {
+      throw new Error('Could not find genes')
+    }
 
-    // Create output arrays for predictions and probabilities
-    const predictions: number[][] = []
-    const probabilities: Float32Array[] = []
+    const totalNumCells = cellNames.length
 
-    // Create array to hold embeddings for UMAP
-    const encodingsForUMAP: Float32Array[] = []
-    const rng = new Prando(42)
+    // Limit the number of cells to process based on % slider
+    cellNames = cellNames.slice(0, (cellRangePercent * cellNames.length) / 100)
 
-    // Create a double buffer for batch encodings
-    const encodingsBuffer = new Float32Array(self.batchSize * numGenes)
+    // Setup all the data structures for reading the expression data incrementally
+    // including dealing with sparse and inflating the sample gene list into the
+    // model's gene list.
+    let isSparse = false
+    let data: H5DataSet
+    let indices: H5DataSet | null = null
+    let indptr: H5DataSet | null = null
+    if (annData.get('X').type == 'Dataset') {
+      isSparse = false
+      data = annData.get('X') as H5DataSet
+    } else if (annData.get('X').type == 'Group') {
+      isSparse = true
+      const xGroup = annData.get('X') as H5Group
+      data = xGroup.get('data') as H5DataSet
+      indices = xGroup.get('indices') as H5DataSet
+      indptr = xGroup.get('indptr') as H5DataSet
+    } else {
+      throw new Error('Could not find expression data')
+    }
 
-    // Process cells in batches
-    const startTime = performance.now()
-    let elapsedTime = 0
+    const labels: [number[], Float32Array][] = []
+    const encodings: Float32Array[] = []
+    const inflationIndices = precomputeInflationIndices(self.model.genes, sampleGenes)
 
-    for (let batchStart = 0; batchStart < numCellsToProcess; batchStart += self.batchSize) {
-      const remainingCells = numCellsToProcess - batchStart
-      const currentBatchSize = Math.min(remainingCells, self.batchSize)
+    const startTime = Date.now() // Record start time
 
-      // Fill the batch data and inflate to model gene space
-      fillBatchData(
-        batchStart,
-        currentBatchSize,
-        data,
-        indices,
-        indptr,
-        isSparse,
-        varNames,
-        inflationIndices,
-        encodingsBuffer,
-        numGenes,
-      )
+    // Initialize double buffers of batches
+    const buffers: Buffer[] = [
+      {
+        size: 0,
+        data: new Float32Array(
+          Math.min(self.batchSize, cellNames.length) * self.model.genes.length,
+        ),
+      },
+      {
+        size: 0,
+        data: new Float32Array(
+          Math.min(self.batchSize, cellNames.length) * self.model.genes.length,
+        ),
+      },
+    ]
+    let activeBuffer = 0
 
-      // Create the tensor for the batch
-      const tensor = new ort.Tensor(
-        'float32',
-        encodingsBuffer.slice(0, currentBatchSize * numGenes),
-        [currentBatchSize, numGenes],
-      )
+    // Fill the first buffer to kickstart the process whereby while prediction runs
+    // on the first buffer, the second buffer is filled with
+    // the next batch of cells.
+    buffers[activeBuffer].size = Math.min(self.batchSize, cellNames.length)
+    fillBatchData(
+      0,
+      buffers[activeBuffer].size,
+      data,
+      indices,
+      indptr,
+      isSparse,
+      sampleGenes,
+      inflationIndices,
+      buffers[activeBuffer].data,
+    )
 
-      // Create the feeds for the model
-      const feeds: Record<string, ort.Tensor> = { input: tensor }
+    // Begin processing batches of cells double buffer style
+    for (let batchStart = 0; batchStart < cellNames.length; batchStart += self.batchSize) {
+      // Start inference async on the active buffer
+      const inputTensor = new ort.Tensor('float32', buffers[activeBuffer].data, [
+        buffers[activeBuffer].size,
+        self.model.genes.length,
+      ])
+      const inferencePromise = self.model.session.run({
+        input: inputTensor,
+      }) as Promise<ModelOutput>
 
-      // Run the model
-      const outputMap = await self.model.session.run(feeds)
+      // Fill next buffer while inference runs asynchronously
+      const nextBuffer = (activeBuffer + 1) % 2
+      const nextStart = batchStart + self.batchSize
+      if (nextStart < cellNames.length) {
+        const nextEnd = Math.min(nextStart + self.batchSize, cellNames.length)
+        const nextSize = nextEnd - nextStart
+        buffers[nextBuffer].size = Math.min(nextSize, cellNames.length - nextStart)
+        if (nextSize < Math.min(self.batchSize, cellNames.length)) {
+          // On the last batch and its less then full size so we need to
+          // resize the Float32Array for the ort.Tensor creator
+          buffers[nextBuffer].data = new Float32Array(nextSize * self.model.genes.length)
+        }
+        fillBatchData(
+          nextStart,
+          buffers[nextBuffer].size,
+          data,
+          indices,
+          indptr,
+          isSparse,
+          sampleGenes,
+          inflationIndices,
+          buffers[nextBuffer].data,
+        )
+      }
 
-      // Get the output tensors
-      const logitsOutput = outputMap.logits.data as Float32Array
-      const attendOutput = outputMap.attend.data as Float32Array
-      const embeddingOutput = outputMap.embedding?.data as Float32Array
+      // Wait for inference to complete on the current buffer
+      const output = await inferencePromise
 
-      // Accumulate attention for explaining predictions
-      // The attention matrix is (batchSize, numClasses, numGenes)
-      for (let i = 0; i < currentBatchSize; i++) {
-        for (let classIndex = 0; classIndex < numClasses; classIndex++) {
-          for (let geneIndex = 0; geneIndex < numGenes; geneIndex++) {
-            const attendIndex = i * numClasses * numGenes + classIndex * numGenes + geneIndex
-            self.attentionAccumulators![classIndex][geneIndex] += attendOutput[attendIndex]
-          }
+      // Parse and store results for each cell in the batch
+      for (let batchSlot = 0; batchSlot < buffers[activeBuffer].size; batchSlot++) {
+        const overallCellIndex = batchStart + batchSlot
+        labels.push([
+          Array.from(output.topk_indices.data.slice(batchSlot * 3, batchSlot * 3 + 3)).map(Number),
+          new Float32Array(output.probs.data.slice(batchSlot * 3, batchSlot * 3 + 3)),
+        ])
+
+        // Only push up to maxNumCellsToUMAP so we limit the memory consumption as these
+        // are 32 float vectors per cell
+        if (overallCellIndex < self.maxNumCellsToUMAP) {
+          // Each encoding row is shaped by your model: e.g. 16 dims
+          const encSize = output.encoding.dims[1]
+          const encSliceStart = batchSlot * encSize
+          const encSliceEnd = encSliceStart + encSize
+          encodings.push(new Float32Array(output.encoding.data.slice(encSliceStart, encSliceEnd)))
+        }
+
+        // Add attention into the predicted class accumulator
+        for (let i = 0; i < self.model.genes.length; i++) {
+          const classIndex = labels[labels.length - 1][0][0]
+          self.attentionAccumulators![classIndex * self.model.genes.length + i] +=
+            output.attention.data[batchSlot * self.model.genes.length + i]
         }
       }
 
-      // Process the output logits into predictions and probabilities
-      for (let i = 0; i < currentBatchSize; i++) {
-        const cellLogits = logitsOutput.slice(i * numClasses, (i + 1) * numClasses)
-        const cellProbs = new Float32Array(cellLogits.length)
-
-        // Convert logits to probabilities with softmax
-        const maxLogit = Math.max(...cellLogits)
-        let sumExp = 0
-        for (let j = 0; j < cellLogits.length; j++) {
-          cellProbs[j] = Math.exp(cellLogits[j] - maxLogit)
-          sumExp += cellProbs[j]
-        }
-        for (let j = 0; j < cellProbs.length; j++) {
-          cellProbs[j] /= sumExp
-        }
-
-        // Sort indices by probability (descending)
-        const indices = Array.from({ length: numClasses }, (_, j) => j)
-        indices.sort((a, b) => cellProbs[b] - cellProbs[a])
-
-        // Store top 3 predictions and their probabilities
-        predictions.push(indices.slice(0, 3))
-        probabilities.push(cellProbs)
-
-        // For UMAP, randomly sample cells
-        if (
-          embeddingOutput &&
-          encodingsForUMAP.length < self.maxNumCellsToUMAP &&
-          rng.next() < self.maxNumCellsToUMAP / numCellsToProcess
-        ) {
-          const embedding = embeddingOutput.slice(i * 128, (i + 1) * 128)
-          encodingsForUMAP.push(new Float32Array(embedding))
-        }
-      }
-
-      // Update progress
-      elapsedTime = (performance.now() - startTime) / 60000
+      // Post progress update
       self.postMessage({
-        type: 'predictionProgress',
-        message: `Processing cells (${elapsedTime.toFixed(2)} minutes elapsed)...`,
-        countFinished: batchStart + currentBatchSize,
-        totalToProcess: numCellsToProcess,
-      })
-    }
-
-    // Calculate UMAP coordinates
-    self.postMessage({ type: 'status', message: 'Calculating UMAP coordinates...' })
-
-    let coords = new Float32Array(0)
-    if (encodingsForUMAP.length > 0) {
-      const umap = new UMAP.UMAP({
-        nComponents: 2,
-        nEpochs: 400,
-        nNeighbors: 15,
+        type: 'processingProgress',
+        message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
+        countFinished: nextStart,
+        totalToProcess: cellNames.length,
       })
 
-      // Convert array of Float32Arrays to a 2D array for UMAP
-      const encodingsArray = encodingsForUMAP.map((arr) => Array.from(arr))
-
-      // Fit and transform the data
-      const embedding = umap.fit(encodingsArray)
-
-      // Convert to flat array of [x1, y1, x2, y2, ...]
-      coords = new Float32Array(embedding.length * 2)
-      for (let i = 0; i < embedding.length; i++) {
-        coords[i * 2] = embedding[i][0]
-        coords[i * 2 + 1] = embedding[i][1]
-      }
+      // Swap buffers
+      activeBuffer = nextBuffer
     }
 
-    // Calculate the top genes per class based on accumulated attention
+    // All done so unmount the h5 file from the browsers file system
+    annData.close()
+    FS.unmount('/work')
+
+    // Record end time and calculate elapsed time of prediction only
+    const endTime = Date.now() // Record end time
+    const elapsedTime = (endTime - startTime) / 60000 // Calculate elapsed time in minutes
+
+    // ========================================================================
+    // Run UMAP on the encoding to calculate a 2D projection
+    // ========================================================================
+    const prando = new Prando(42)
+    const random = () => prando.next()
+
+    const umap = new UMAP.UMAP({
+      random,
+      nComponents: 2,
+      nEpochs: 400,
+      nNeighbors: 15,
+    })
+
+    let coordinates: number[][] | null = null
+    try {
+      coordinates = await umap.fitAsync(encodings, (epochNumber: number) => {
+        // check progress and give user feedback, or return `false` to stop
+        self.postMessage({
+          type: 'processingProgress',
+          message: `Computing the first ${encodings.length} coordinates...`,
+          countFinished: epochNumber,
+          totalToProcess: umap.getNEpochs(),
+        })
+      })
+    } catch (error) {
+      self.postMessage({ type: 'predictionError', error })
+      throw error
+    }
+
+    // ========================================================================
+    // Calculate top K gene indices per class and overall as well as
+    // the overall top k gene indices for all predictions. These are used
+    // to explain the predictions per class and overall.
+    // ========================================================================
     const topGeneIndicesByClass: number[][] = []
-    for (let classIndex = 0; classIndex < numClasses; classIndex++) {
-      const classAttention = self.attentionAccumulators![classIndex]
-      const indices = Array.from({ length: numGenes }, (_, i) => i)
-      indices.sort((a, b) => classAttention[b] - classAttention[a])
-      topGeneIndicesByClass.push(indices.slice(0, self.numExplainGenes))
+
+    function topKIndices(x: Float32Array, k: number): number[] {
+      const indices = Array.from(x.keys())
+      indices.sort((a, b) => x[b] - x[a])
+      return indices.slice(0, k)
     }
 
-    // Calculate overall top genes across all classes
-    const overallAttention = Array(numGenes).fill(0)
-    for (let classIndex = 0; classIndex < numClasses; classIndex++) {
-      for (let geneIndex = 0; geneIndex < numGenes; geneIndex++) {
-        overallAttention[geneIndex] += self.attentionAccumulators![classIndex][geneIndex]
+    const overallAccumulator = new Float32Array(self.model.genes.length)
+    for (let i = 0; i < self.model.classes.length; i++) {
+      topGeneIndicesByClass.push(
+        topKIndices(
+          self.attentionAccumulators!.slice(
+            i * self.model.genes.length,
+            (i + 1) * self.model.genes.length,
+          ),
+          self.numExplainGenes,
+        ),
+      )
+      for (let j = 0; j < self.model.genes.length; j++) {
+        overallAccumulator[j] += self.attentionAccumulators![i * self.model.genes.length + j]
       }
     }
-    const allIndices = Array.from({ length: numGenes }, (_, i) => i)
-    allIndices.sort((a, b) => overallAttention[b] - overallAttention[a])
-    const overallTopGenes = allIndices.slice(0, self.numExplainGenes)
+    const overallTopGenes = topKIndices(overallAccumulator, self.numExplainGenes)
 
-    // Assign cell types based on top prediction
-    const cellTypes = predictions.map((p) => p[0])
+    const cellTypes = labels.map((label) => label[0][0])
 
-    // Store the results in IndexedDB
-    self.postMessage({ type: 'status', message: 'Storing results in database...' })
-
-    const db = await openDB('sims-web', 2)
+    // Store results in IndexedDB
+    const db = await openDB('sims-web')
     const tx = db.transaction('datasets', 'readwrite')
     const store = tx.objectStore('datasets')
-
-    const result: PredictionResult = {
+    await store.put({
+      // Note: these are expected and used by the UCSC cell browser so don't change
+      // without coordinating with the UCSC cell browser team (i.e. Max!)
       datasetLabel: h5File.name,
-      coords,
-      cellTypeNames: self.model.classes,
-      cellTypes,
-      modelID: self.model.modelID,
-      topGeneIndicesByClass,
-      genes: self.model.genes,
-      overallTopGenes,
-      cellNames: obsNames.slice(0, numCellsToProcess),
-      predictions,
-      probabilities,
-    }
+      coords: coordinates!.flat(), // Float32Array of length 2*n
+      cellTypeNames: self.model.classes, // Array of strings
+      cellTypes: cellTypes,
 
-    await store.add(result)
+      // Used for the UIs and export in this application
+      modelID: self.model.modelID,
+      topGeneIndicesByClass, // Array of arrays, 1 per class, of top indices
+      genes: self.model.genes, // Array of strings
+      overallTopGenes,
+      cellNames,
+      predictions: labels.map((label) => label[0]),
+      probabilities: labels.map((label) => label[1]),
+    })
     await tx.done
     db.close()
 
-    // Clean up
-    h5.close()
-    h5wasm.fs.unmount(root)
-
-    // Notify main thread of completion
+    // Let the main thread know we're done and results are ready in IndexDB
     self.postMessage({
       type: 'finishedPrediction',
-      totalProcessed: numCellsToProcess,
-      totalNumCells,
+      datasetLabel: h5File.name,
       elapsedTime,
+      totalProcessed: cellNames.length,
+      totalNumCells,
     })
   } catch (error) {
-    console.error('Prediction error:', error)
-    self.postMessage({
-      type: 'predictionError',
-      error: error instanceof Error ? error.message : String(error),
-    })
+    // FS.unmount("/work");
+    self.postMessage({ type: 'predictionError', error: error })
   }
 }
-
-export default {} as typeof Worker & { new (): Worker }

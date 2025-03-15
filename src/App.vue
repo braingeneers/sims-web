@@ -1,26 +1,34 @@
 <template>
   <v-app>
     <v-app-bar>
-      <v-toolbar-title>Cell Space</v-toolbar-title>
+      <v-toolbar-title>SIMS Web</v-toolbar-title>
 
       <!-- File Selector -->
       <v-file-input
         v-model="selectedFile"
         accept=".h5ad"
-        label="H5AD File"
         variant="underlined"
-        style="max-width: 400px"
-        truncate-length="15"
+        style="max-width: 25%"
+        prepend-icon="mdi-dna"
+        hint="You must select a .h5ad file"
         @update:model-value="handleFileSelected"
-      ></v-file-input>
+      >
+        <template v-if="selectedFile" #selection>
+          {{
+            selectedFile.name.length > 30
+              ? selectedFile.name.slice(0, 25) + '...'
+              : selectedFile.name
+          }}</template
+        ></v-file-input
+      >
 
       <!-- Labeling Background Dataset-->
       <v-select
         v-model="selectedPredictWorker"
         :items="predictWorkerOptions"
-        label="Labeling Background Dataset"
         variant="underlined"
-        style="max-width: 200px"
+        style="max-width: 25%"
+        prepend-icon="mdi-label-multiple"
         item-title="title"
         item-value="value"
       ></v-select>
@@ -29,17 +37,25 @@
       <v-select
         v-model="selectedClusterWorker"
         :items="clusterWorkerOptions"
-        label="Cluster Model"
+        prepend-icon="mdi-scatter-plot"
         variant="underlined"
-        style="max-width: 200px"
+        style="max-width: 25%"
       ></v-select>
 
       <!-- Run Button -->
-      <v-btn color="primary" class="mx-2" @click="runPipeline" :loading="isProcessing"> Run </v-btn>
+      <v-app-bar-nav-icon
+        color="primary"
+        @click="runPipeline"
+        :loading="isProcessing"
+        icon="mdi-play"
+      >
+      </v-app-bar-nav-icon>
 
-      <v-btn @click="toggleTheme">
+      <!-- Stop Button -->
+      <v-app-bar-nav-icon color="error" @click="handleStop" icon="mdi-stop"></v-app-bar-nav-icon>
+      <v-app-bar-nav-icon @click="toggleTheme">
         <v-icon>mdi-theme-light-dark</v-icon>
-      </v-btn>
+      </v-app-bar-nav-icon>
     </v-app-bar>
 
     <v-main>
@@ -66,22 +82,9 @@
           </v-card-text>
         </v-card>
 
-        <!-- Analysis Results Display -->
-        <v-card v-if="analysisResults.length > 0" class="mb-4">
-          <v-card-title>Analysis Results</v-card-title>
-          <v-card-text>
-            <v-list>
-              <v-list-item v-for="(result, index) in analysisResults" :key="index">
-                <v-list-item-title>{{ result.type }} Result</v-list-item-title>
-                <v-list-item-subtitle>{{ result.summary }}</v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </v-card-text>
-        </v-card>
-
         <!-- Predictions Plot -->
         <v-card v-if="resultsDB" class="mb-4">
-          <v-card-title>Analysis Results</v-card-title>
+          <v-card-title>UMAP</v-card-title>
           <v-card-text>
             <predictions-plot
               :width="450"
@@ -94,7 +97,7 @@
 
         <!-- Predictions Sankey -->
         <v-card v-if="resultsDB" class="mb-4">
-          <v-card-title>Analysis Results</v-card-title>
+          <v-card-title>Gene's Driving Labels</v-card-title>
           <v-card-text>
             <predictions-sankey
               :cell-types="resultsDB.cellTypes"
@@ -107,7 +110,7 @@
 
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
-          <v-card-title>Analysis Results</v-card-title>
+          <v-card-title>Predictions</v-card-title>
           <v-card-text>
             <predictions-table
               :cell-names="resultsDB.cellNames"
@@ -125,10 +128,10 @@
 
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
-import { defineComponent, ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
-import { openDB, IDBPDatabase } from 'idb'
-import SIMSWorker from './workers/sims-worker.js?worker'
+import { openDB } from 'idb'
+import SIMSWorker from './workers/sims-worker.ts?worker'
 
 import PredictionsTable from './PredictionsTable.vue'
 import PredictionsPlot from './PredictionsPlot.vue'
@@ -146,6 +149,20 @@ interface ModelMetadata {
   title: string
   submitter: string
   [key: string]: unknown
+}
+
+// TypeScript interface for dataset
+interface Dataset {
+  datasetLabel: string
+  cellNames: string[]
+  cellTypes: number[]
+  cellTypeNames: string[]
+  predictions: number[][]
+  probabilities: Float32Array[]
+  coords: number[]
+  genes: string[]
+  overallTopGenes: number[]
+  topGeneIndicesByClass: number[][]
 }
 
 // Available files and workers
@@ -209,7 +226,7 @@ function toggleTheme() {
 // IndexedDB
 const DB_VERSION = 2
 
-const resultsDB = ref<IDBPDatabase | null>(null)
+const resultsDB = ref<Dataset | null>(null)
 
 async function loadDataset() {
   try {
@@ -298,14 +315,22 @@ function runPipeline() {
   })
 }
 
+function handleStop() {
+  // Terminate workers
+  predictWorker.value?.terminate()
+  processingWorker.value?.terminate()
+  clusterWorker.value?.terminate()
+  // Reinitialize workers
+  initializeWorkers()
+  isProcessing.value = false
+}
+
 function handleFileSelected(files: File | File[]) {
   const file = Array.isArray(files) ? files[0] : files
   if (file) {
     selectedFile.value = file
-    currentStatus.value = `Selected file: ${file.name}`
   } else {
     selectedFile.value = null
-    currentStatus.value = 'No file selected'
   }
 }
 
