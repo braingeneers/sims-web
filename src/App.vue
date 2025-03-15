@@ -2,28 +2,24 @@
   <v-app>
     <v-app-bar>
       <v-toolbar-title>Cell Space</v-toolbar-title>
-      <v-spacer></v-spacer>
 
       <!-- File Selector -->
       <v-file-input
         v-model="selectedFile"
         accept=".h5ad"
-        label="Select an h5ad File"
+        label="H5AD File"
         variant="underlined"
-        class="mx-2"
-        style="max-width: 250px"
-        hide-details
+        style="max-width: 400px"
         truncate-length="15"
         @update:model-value="handleFileSelected"
       ></v-file-input>
 
-      <!-- First Worker Selector -->
+      <!-- Labeling Background Dataset-->
       <v-select
         v-model="selectedPredictWorker"
         :items="predictWorkerOptions"
-        label="File Worker"
+        label="Labeling Background Dataset"
         variant="underlined"
-        class="mx-2"
         style="max-width: 200px"
         item-title="title"
         item-value="value"
@@ -33,9 +29,8 @@
       <v-select
         v-model="selectedClusterWorker"
         :items="clusterWorkerOptions"
-        label="Analysis Worker"
+        label="Cluster Model"
         variant="underlined"
-        class="mx-2"
         style="max-width: 200px"
       ></v-select>
 
@@ -396,23 +391,4 @@ onUnmounted(() => {
 })
 </script>
 
-<style>
-@import '@mdi/font/css/materialdesignicons.min.css';
-
-:root {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
-    'Helvetica Neue', sans-serif;
-}
-
-.v-application {
-  font-family: inherit;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.v-toolbar-title {
-  font-weight: 600;
-}
-</style>
+<style></style>
