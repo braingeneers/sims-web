@@ -349,6 +349,7 @@ function handlePredictWorkerMessage(event: MessageEvent) {
       type: 'Prediction',
       summary: `Processed ${event.data.totalProcessed} items in ${processingTime.value.toFixed(2)} seconds`,
     })
+    loadDataset()
   } else if (type === 'predictionError') {
     currentStatus.value = message
     isProcessing.value = false
