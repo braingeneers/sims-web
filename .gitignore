@@ -2,6 +2,8 @@ venv
 checkpoints
 data
 
+.tsbuildinfo.*
+
 # Logs
 logs
 *.log

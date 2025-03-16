@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar>
+    <v-app-bar dark fixed>
       <v-toolbar-title>SIMS Web</v-toolbar-title>
 
       <!-- File Selector -->
@@ -56,23 +56,24 @@
       <v-app-bar-nav-icon @click="toggleTheme">
         <v-icon>mdi-theme-light-dark</v-icon>
       </v-app-bar-nav-icon>
-    </v-app-bar>
-
-    <v-main>
-      <v-container fluid>
+      <template v-if="isProcessing" #extension>
         <!-- Status Display -->
-        <v-card class="mb-4">
+        <v-card class="mb-" style="width: 100%" flat="true">
           <v-card-text>
             <v-progress-linear
               v-if="isProcessing"
               :model-value="processingProgress"
               color="primary"
-              height="10"
+              height="4"
             ></v-progress-linear>
             <p v-if="currentStatus">{{ currentStatus }}</p>
           </v-card-text>
         </v-card>
+      </template></v-app-bar
+    >
 
+    <v-main>
+      <v-container fluid>
         <!-- File Information Display -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
