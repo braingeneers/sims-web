@@ -133,6 +133,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 import { openDB } from 'idb'
 import SIMSWorker from './workers/sims-worker.ts?worker'
+import UMAPWorker from './workers/umap-worker.ts?worker'
 
 import PredictionsTable from './PredictionsTable.vue'
 import PredictionsPlot from './PredictionsPlot.vue'
@@ -158,6 +159,7 @@ interface Dataset {
   cellNames: string[]
   cellTypes: number[]
   cellTypeNames: string[]
+  encodings: Float32Array[]
   predictions: number[][]
   probabilities: Float32Array[]
   coords: number[]
@@ -205,7 +207,6 @@ async function fetchModels() {
 
 // Workers
 const predictWorker = ref<Worker | null>(null)
-const processingWorker = ref<Worker | null>(null)
 const clusterWorker = ref<Worker | null>(null)
 
 // Results
@@ -266,9 +267,9 @@ function initializeWorkers() {
   predictWorker.value = new SIMSWorker()
   predictWorker.value.onmessage = handlePredictWorkerMessage
 
-  // Create processing worker
-  // processingWorker.value = new Worker(new URL('./workers/processingWorker.js', import.meta.url))
-  // processingWorker.value.onmessage = handleProcessingWorkerMessage
+  // Create cluster worker
+  clusterWorker.value = new UMAPWorker()
+  clusterWorker.value.onmessage = handleClusterWorkerMessage
 }
 
 function runPipeline() {
@@ -286,22 +287,9 @@ function runPipeline() {
   processingStartTime.value = Date.now()
 
   // Initialize workers if needed
-  if (!predictWorker.value || !processingWorker.value) {
+  if (!predictWorker.value || !clusterWorker.value) {
     initializeWorkers()
   }
-
-  // Create selected analysis worker based on selection
-  if (clusterWorker.value) {
-    clusterWorker.value.terminate()
-  }
-
-  // if (selectedClusterWorker.value === 'Average Calculator') {
-  //   clusterWorker.value = new Worker(new URL('./workers/averageWorker.js', import.meta.url))
-  //   clusterWorker.value.onmessage = handleClusterWorkerMessage
-  // } else {
-  //   clusterWorker.value = new Worker(new URL('./workers/minMaxWorker.js', import.meta.url))
-  //   clusterWorker.value.onmessage = handleClusterWorkerMessage
-  // }
 
   // Start the pipeline by sending a message to the file worker
   const modelURL = `${window.location.protocol}//${window.location.host}/models`
@@ -317,7 +305,6 @@ function runPipeline() {
 function handleStop() {
   // Terminate workers
   predictWorker.value?.terminate()
-  processingWorker.value?.terminate()
   clusterWorker.value?.terminate()
   // Reinitialize workers
   initializeWorkers()
@@ -338,22 +325,45 @@ function handlePredictWorkerMessage(event: MessageEvent) {
 
   if (type === 'status') {
     currentStatus.value = message
-  } else if (type === 'batchData') {
-    // Pass the batch data to the processing worker
-    processingWorker.value?.postMessage({
-      type: 'processBatch',
-      batch: event.data.batch,
-      batchSize: event.data.batchSize,
-      numCells: event.data.numCells,
-      numGenes: event.data.numGenes,
-    })
-    currentStatus.value = message
   } else if (type === 'processingProgress') {
     // Update progress based on countFinished and totalToProcess
     const { countFinished, totalToProcess } = event.data
     processingProgress.value = (countFinished / totalToProcess) * 100
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'finishedPrediction') {
+    // Add processing result to analysis results
+    analysisResults.value.push({
+      type: 'Prediction',
+      summary: `Processed ${event.data.totalProcessed} items in ${((Date.now() - processingStartTime.value) / 1000).toFixed(2)} seconds`,
+    })
+
+    // Reset progress bar for UMAP
+    processingProgress.value = 0
+    processingStartTime.value = Date.now()
+
+    // Start UMAP computation
+    currentStatus.value = 'Starting UMAP computation...'
+    clusterWorker.value?.postMessage({
+      type: 'startUMAP',
+      datasetLabel: event.data.datasetLabel,
+    })
+  } else if (type === 'predictionError') {
+    currentStatus.value = message
+    isProcessing.value = false
+  }
+}
+
+function handleClusterWorkerMessage(event: MessageEvent) {
+  const { type, message } = event.data
+
+  if (type === 'status') {
+    currentStatus.value = message
+  } else if (type === 'processingProgress') {
+    // Update progress based on countFinished and totalToProcess
+    const { countFinished, totalToProcess } = event.data
+    processingProgress.value = (countFinished / totalToProcess) * 100
+    currentStatus.value = `UMAP: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
+  } else if (type === 'finishedUMAP') {
     // Calculate processing time
     processingTime.value = (Date.now() - processingStartTime.value) / 1000
 
@@ -364,61 +374,15 @@ function handlePredictWorkerMessage(event: MessageEvent) {
 
     // Add processing result to analysis results
     analysisResults.value.push({
-      type: 'Prediction',
-      summary: `Processed ${event.data.totalProcessed} items in ${processingTime.value.toFixed(2)} seconds`,
+      type: 'UMAP',
+      summary: `Computed UMAP coordinates in ${processingTime.value.toFixed(2)} seconds`,
     })
     loadDataset()
-  } else if (type === 'predictionError') {
-    currentStatus.value = message
+  } else if (type === 'umapError') {
+    currentStatus.value = `UMAP Error: ${event.data.error}`
     isProcessing.value = false
   }
 }
-
-// function handleProcessingWorkerMessage(event: MessageEvent) {
-//   const { type, message } = event.data
-
-//   if (type === 'status') {
-//     currentStatus.value = message
-//   } else if (type === 'batchProcessed') {
-//     // Pass the processed data to the selected analysis worker
-//     if (selectedClusterWorker.value === 'Average Calculator') {
-//       clusterWorker.value?.postMessage({
-//         type: 'computeAverage',
-//         batch: event.data.batch,
-//         batchSize: event.data.batchSize,
-//         numCells: event.data.numCells,
-//         numGenes: event.data.numGenes,
-//       })
-//     } else {
-//       clusterWorker.value?.postMessage({
-//         type: 'computeMinMax',
-//         batch: event.data.batch,
-//         batchSize: event.data.batchSize,
-//         numCells: event.data.numCells,
-//         numGenes: event.data.numGenes,
-//       })
-//     }
-//     currentStatus.value = message
-//   } else if (type === 'error') {
-//     currentStatus.value = message
-//     isProcessing.value = false
-//   }
-// }
-
-// function handleClusterWorkerMessage(event: MessageEvent) {
-//   const { type, message } = event.data
-
-//   if (type === 'status') {
-//     currentStatus.value = message
-//   } else if (type === 'analysisResult') {
-//     analysisResults.value.push(event.data.result)
-//     currentStatus.value = message
-//     isProcessing.value = false
-//   } else if (type === 'error') {
-//     currentStatus.value = message
-//     isProcessing.value = false
-//   }
-// }
 
 // Fetch a sample file on application load
 async function fetchSampleFile() {
@@ -449,7 +413,6 @@ onMounted(() => {
 onUnmounted(() => {
   // Clean up workers
   predictWorker.value?.terminate()
-  processingWorker.value?.terminate()
   clusterWorker.value?.terminate()
 })
 </script>
