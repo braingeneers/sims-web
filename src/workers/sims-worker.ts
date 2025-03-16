@@ -45,7 +45,6 @@
  */
 import h5wasm from 'h5wasm'
 import Prando from 'prando'
-import * as UMAP from 'umap-js'
 import * as ort from 'onnxruntime-web'
 import { openDB } from 'idb'
 
@@ -559,35 +558,6 @@ async function predict(
     const elapsedTime = (endTime - startTime) / 60000 // Calculate elapsed time in minutes
 
     // ========================================================================
-    // Run UMAP on the encoding to calculate a 2D projection
-    // ========================================================================
-    const prando = new Prando(42)
-    const random = () => prando.next()
-
-    const umap = new UMAP.UMAP({
-      random,
-      nComponents: 2,
-      nEpochs: 400,
-      nNeighbors: 15,
-    })
-
-    let coordinates: number[][] | null = null
-    try {
-      coordinates = await umap.fitAsync(encodings, (epochNumber: number) => {
-        // check progress and give user feedback, or return `false` to stop
-        self.postMessage({
-          type: 'processingProgress',
-          message: `Computing the first ${encodings.length} coordinates...`,
-          countFinished: epochNumber,
-          totalToProcess: umap.getNEpochs(),
-        })
-      })
-    } catch (error) {
-      self.postMessage({ type: 'predictionError', error })
-      throw error
-    }
-
-    // ========================================================================
     // Calculate top K gene indices per class and overall as well as
     // the overall top k gene indices for all predictions. These are used
     // to explain the predictions per class and overall.
@@ -627,7 +597,6 @@ async function predict(
       // Note: these are expected and used by the UCSC cell browser so don't change
       // without coordinating with the UCSC cell browser team (i.e. Max!)
       datasetLabel: h5File.name,
-      coords: coordinates!.flat(), // Float32Array of length 2*n
       cellTypeNames: self.model.classes, // Array of strings
       cellTypes: cellTypes,
 

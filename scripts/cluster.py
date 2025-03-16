@@ -25,10 +25,8 @@ app = typer.Typer(help="Single cell expression data encoder and clustering")
 
 
 @app.command()
-def encode(
-    encoder_model_path: Path = typer.Argument(
-        ..., help="Path to encoder.onnx model file"
-    ),
+def predict(
+    onnx_model_path: Path = typer.Argument(..., help="Path to model .onnx file"),
     sample_path: Path = typer.Argument(..., help="Path to sample.h5ad file"),
     batch_size: int = typer.Option(
         32, help="Number of samples to process in each batch"
@@ -38,37 +36,40 @@ def encode(
     ),
 ) -> None:
     """
-    Generate encodings for a sample .h5ad file containing single cell expression data.
+    Generate predictions and encodings for a sample .h5ad file containing single cell expression data.
 
     Args:
-        encoder_model_path: Path to an encoder.onnx model file
+        onnx_model_path: Path to an model .onnx file
         sample_path: Path to a sample.h5ad file containing gene expression data
         batch_size: Number of samples to process at a time
         num_samples: Limit the total number of inputs processed, process all if None
     """
-    typer.echo(f"Encoding samples from {sample_path} using model {encoder_model_path}")
+    typer.echo(
+        f"Generating predictions and encodings for {sample_path} using model {onnx_model_path}"
+    )
 
-    # Instantiate the encoder model
-    encoder_session = ort.InferenceSession(str(encoder_model_path))
+    # Instantiate the model
+    model_session = ort.InferenceSession(str(onnx_model_path))
 
-    # # Get model input shape to determine the expected genes
-    input_shape = encoder_session.get_inputs()[0].shape
+    # Get model input shape to determine the expected genes
+    input_shape = model_session.get_inputs()[0].shape
     model_input_size = input_shape[1] if len(input_shape) > 1 else input_shape[0]
 
     # Load the sample data
     adata = ad.read_h5ad(sample_path)
 
     # Create an inflation mapping between model genes and sample genes
-    inflation_map = create_inflation_map(adata, encoder_model_path)
+    inflation_map = create_inflation_map(adata, onnx_model_path)
 
     # Determine number of cells to process
     num_cells = num_samples if num_samples is not None else adata.n_obs
     if num_samples is not None:
         num_cells = min(adata.n_obs, num_samples)
-    
+
     typer.echo(f"Processing {num_cells} cells with batch size {batch_size}")
 
     # Initialize numpy array to store encodings
+    predictions = []
     encodings = []
 
     # Process in batches
@@ -100,21 +101,32 @@ def encode(
 
             # Run the model
             model_input = {"input": inflated_batch.astype(np.float32)}
-            batch_encodings = encoder_session.run(["encoding"], model_input)[0]
+            batch_predictions, batch_encodings = model_session.run(
+                ["topk_indices", "encoding"], model_input
+            )
 
             # Store the encodings
             encodings.append(batch_encodings)
+
+            # Store just the top prediction indice
+            predictions.append(batch_predictions[:, 0])
 
             pbar.update(batch_size_actual)
 
     # Combine all batches
     all_encodings = np.vstack(encodings)
+    all_predictions = np.concatenate(predictions)
 
     # Save the encodings
-    output_path = sample_path.with_name(f"{sample_path.stem}-encodings.npy")
-    np.save(output_path, all_encodings)
+    encodings_path = sample_path.with_name(f"{sample_path.stem}-encodings.npy")
+    np.save(encodings_path, all_encodings)
 
-    typer.echo(f"Saved encodings to {output_path}")
+    # Save the predictions
+    predictions_path = sample_path.with_name(f"{sample_path.stem}-predictions.npy")
+    np.save(predictions_path, all_predictions)
+
+    typer.echo(f"Saved encodings to {encodings_path}")
+    typer.echo(f"Saved predictions to {predictions_path}")
 
 
 def create_inflation_map(adata, encoder_model_path: str) -> Dict[int, int]:
@@ -221,7 +233,8 @@ def train_hdbscan(
         ..., help="Path output cluster.onnx and labels.npy file"
     ),
     num_encodings: Optional[int] = typer.Option(
-        None, help="Limit the total number of encodings used for training, use all if None"
+        None,
+        help="Limit the total number of encodings used for training, use all if None",
     ),
     min_cluster_size: int = typer.Option(
         5, help="Minimum number of samples for a cluster"
@@ -247,7 +260,7 @@ def train_hdbscan(
     num_encodings = num_encodings if num_encodings is not None else encodings.shape[0]
     if num_encodings is not None:
         num_encodings = min(encodings.shape[0], num_encodings)
-    
+
     encodings = encodings[:num_encodings]
 
     # Create and fit the model
@@ -326,7 +339,7 @@ def cluster(
     num_encodings = num_samples if num_samples is not None else encodings.shape[0]
     if num_samples is not None:
         num_encodings = min(encodings.shape[0], num_samples)
-    
+
     typer.echo(f"Processing {num_encodings} encodings with batch size {batch_size}")
 
     # Initialize numpy array to store cluster labels
