@@ -1,3 +1,4 @@
+# Pull from the latest as that's what is being used to train the models...
 https://github.com/braingeneers/SIMS/archive/refs/heads/main.zip
 
 # Tiny mod to compute sparsemax in double precision for onnx concordance
@@ -15,6 +16,3 @@ anndata>=0.8.0
 tqdm>=4.65.0
 
 sckit-learn>=1.6.1
-
-# numpy>=1.23.0
-# torch>=2.0.0
