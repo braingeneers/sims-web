@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <v-app-bar dark fixed>
-      <v-toolbar-title>SIMS Web</v-toolbar-title>
+      <v-toolbar-title>Cell Space</v-toolbar-title>
 
       <!-- File Selector -->
       <v-file-input
@@ -44,6 +44,7 @@
 
       <!-- Run Button -->
       <v-app-bar-nav-icon
+        data-cy="run-button"
         color="primary"
         @click="runPipeline"
         :loading="isProcessing"
@@ -77,7 +78,7 @@
         <!-- File Information Display -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
-          <v-card-text>
+          <v-card-text data-cy="results">
             <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
             {{ resultsDB.genes.length }}
           </v-card-text>
@@ -262,6 +263,19 @@ async function loadDataset() {
   }
 }
 
+async function clearResults() {
+  try {
+    const db = await openDB('sims-web', DB_VERSION)
+    await db.clear('datasets')
+    db.close()
+    // Clear UI dataset if present
+    resultsDB.value = null
+  } catch (error) {
+    console.error('Error clearing database:', error)
+    currentStatus.value = 'Error clearing previous results'
+  }
+}
+
 function initializeWorkers() {
   // Create file worker
   predictWorker.value = new SIMSWorker()
@@ -272,15 +286,17 @@ function initializeWorkers() {
   clusterWorker.value.onmessage = handleClusterWorkerMessage
 }
 
-function runPipeline() {
+async function runPipeline() {
   // Check if a file is selected
   if (!selectedFile.value) {
     currentStatus.value = 'Please select an H5AD file first'
     return
   }
 
-  // Reset previous results
+  // Clear previous results from database and UI
+  await clearResults()
   analysisResults.value = []
+
   isProcessing.value = true
   currentStatus.value = 'Starting pipeline...'
   processingProgress.value = 0
@@ -309,6 +325,8 @@ function handleStop() {
   // Reinitialize workers
   initializeWorkers()
   isProcessing.value = false
+
+  clearResults()
 }
 
 function handleFileSelected(files: File | File[]) {

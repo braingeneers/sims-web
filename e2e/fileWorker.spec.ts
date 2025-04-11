@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-const workerUrl = '/src/workers/PredictWorker.js'
+// const workerUrl = '/src/workers/PredictWorker.js'
+const workerUrl = '/src/workers/fileWorker.js'
 // const workerUrl = '/src/worker.js'
 
 test('Web Worker doubles the input number', async ({ page }) => {
