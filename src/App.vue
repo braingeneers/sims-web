@@ -154,6 +154,7 @@ import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
 import { openDB } from 'idb'
+import H5Worker from './workers/h5.ts?worker'
 import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
@@ -228,6 +229,7 @@ async function fetchModels() {
 }
 
 // Workers
+const h5Worker = ref<Worker | null>(null)
 const predictWorker = ref<Worker | null>(null)
 const clusterWorker = ref<Worker | null>(null)
 
@@ -299,6 +301,10 @@ async function clearResults() {
 
 function initializeWorkers() {
   // Create file worker
+  h5Worker.value = new H5Worker()
+  h5Worker.value.onmessage = handleH5WorkerMessage
+
+  // Create file worker
   predictWorker.value = new SIMSWorker()
   predictWorker.value.onmessage = handlePredictWorkerMessage
 
@@ -324,19 +330,24 @@ async function runPipeline() {
   processingStartTime.value = Date.now()
 
   // Initialize workers if needed
-  if (!predictWorker.value || !clusterWorker.value) {
+  if (!h5Worker.value || !predictWorker.value || !clusterWorker.value) {
     initializeWorkers()
   }
 
-  // Start the pipeline by sending a message to the file worker
-  const modelURL = `${window.location.protocol}//${window.location.host}/models`
-  predictWorker.value?.postMessage({
-    type: 'startPrediction',
-    modelID: selectedPredictWorker.value,
-    modelURL: modelURL,
+  h5Worker.value?.postMessage({
+    type: 'load',
     h5File: selectedFile.value,
-    cellRangePercent: 25,
   })
+
+  // // Start the pipeline by sending a message to the file worker
+  // const modelURL = `${window.location.protocol}//${window.location.host}/models`
+  // predictWorker.value?.postMessage({
+  //   type: 'startPrediction',
+  //   modelID: selectedPredictWorker.value,
+  //   modelURL: modelURL,
+  //   h5File: selectedFile.value,
+  //   cellRangePercent: 25,
+  // })
 }
 
 function handleStop() {
@@ -356,6 +367,26 @@ function handleFileSelected(files: File | File[]) {
     selectedFile.value = file
   } else {
     selectedFile.value = null
+  }
+}
+
+function handleH5WorkerMessage(event: MessageEvent) {
+  const { type } = event.data
+
+  if (type === 'buffer') {
+    const { buffer } = event.data
+    console.log('Buffer received:', buffer)
+
+    // Start the pipeline by sending a message to the file worker
+    console.log('Starting prediction with selected model:', selectedPredictWorker.value)
+    const modelURL = `${window.location.protocol}//${window.location.host}/models`
+    predictWorker.value?.postMessage({
+      type: 'startPrediction',
+      modelID: selectedPredictWorker.value,
+      modelURL: modelURL,
+      h5File: selectedFile.value,
+      cellRangePercent: 25,
+    })
   }
 }
 
