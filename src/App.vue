@@ -59,7 +59,7 @@
       </v-app-bar-nav-icon>
       <template v-if="isProcessing" #extension>
         <!-- Status Display -->
-        <v-card class="mb-" style="width: 100%" flat="true">
+        <v-card class="mb-" style="width: 100%" :flat="true">
           <v-card-text>
             <v-progress-linear
               v-if="isProcessing"
