@@ -75,6 +75,27 @@
 
     <v-main>
       <v-container fluid>
+        <!-- Analysis Results Display -->
+        <v-card v-if="analysisResults.length > 0" class="mb-4">
+          <v-card-title>Analysis Progress</v-card-title>
+          <v-card-text>
+            <v-timeline v-if="analysisResults.length > 0" density="comfortable">
+              <v-timeline-item
+                v-for="(result, index) in analysisResults"
+                :key="index"
+                :dot-color="result.type === 'Prediction' ? 'primary' : 'success'"
+                size="small"
+              >
+                <template v-slot:opposite>
+                  <strong>{{ result.type }}</strong>
+                </template>
+                <div>{{ result.summary }}</div>
+              </v-timeline-item>
+            </v-timeline>
+            <p v-else>No analysis results yet. Select a file and click the Run button to begin.</p>
+          </v-card-text>
+        </v-card>
+
         <!-- File Information Display -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
