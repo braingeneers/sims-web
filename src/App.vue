@@ -105,32 +105,6 @@
           </v-card-text>
         </v-card>
 
-        <!-- Predictions Plot -->
-        <v-card v-if="resultsDB" class="mb-4">
-          <v-card-title>UMAP</v-card-title>
-          <v-card-text>
-            <predictions-plot
-              :width="450"
-              :height="450"
-              :labels="resultsDB.cellTypes"
-              :coordinates="resultsDB.coords"
-            ></predictions-plot>
-          </v-card-text>
-        </v-card>
-
-        <!-- Predictions Sankey -->
-        <v-card v-if="resultsDB" class="mb-4">
-          <v-card-title>Gene's Driving Labels</v-card-title>
-          <v-card-text>
-            <predictions-sankey
-              :cell-types="resultsDB.cellTypes"
-              :cell-type-names="resultsDB.cellTypeNames"
-              :top-gene-indices-by-class="resultsDB.topGeneIndicesByClass"
-              :genes="resultsDB.genes"
-            ></predictions-sankey>
-          </v-card-text>
-        </v-card>
-
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
@@ -154,13 +128,10 @@ import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
 import { openDB } from 'idb'
-import H5Worker from './workers/h5.ts?worker'
 import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
 import PredictionsTable from './PredictionsTable.vue'
-import PredictionsPlot from './PredictionsPlot.vue'
-import PredictionsSankey from './PredictionsSankey.vue'
 
 const theme = useTheme()
 const isProcessing = ref(false)
@@ -300,15 +271,11 @@ async function clearResults() {
 }
 
 function initializeWorkers() {
-  // Create file worker
-  h5Worker.value = new H5Worker()
-  h5Worker.value.onmessage = handleH5WorkerMessage
-
-  // Create file worker
+  // Create SIMS worker
   predictWorker.value = new SIMSWorker()
   predictWorker.value.onmessage = handlePredictWorkerMessage
 
-  // Create cluster worker
+  // Create UMAP worker
   clusterWorker.value = new UMAPWorker()
   clusterWorker.value.onmessage = handleClusterWorkerMessage
 }
@@ -330,24 +297,19 @@ async function runPipeline() {
   processingStartTime.value = Date.now()
 
   // Initialize workers if needed
-  if (!h5Worker.value || !predictWorker.value || !clusterWorker.value) {
+  if (!predictWorker.value || !clusterWorker.value) {
     initializeWorkers()
   }
 
-  h5Worker.value?.postMessage({
-    type: 'load',
+  // Start the pipeline by sending a message to the file worker
+  const modelURL = `${window.location.protocol}//${window.location.host}/models`
+  predictWorker.value?.postMessage({
+    type: 'startPrediction',
+    modelID: selectedPredictWorker.value,
+    modelURL: modelURL,
     h5File: selectedFile.value,
+    cellRangePercent: 25,
   })
-
-  // // Start the pipeline by sending a message to the file worker
-  // const modelURL = `${window.location.protocol}//${window.location.host}/models`
-  // predictWorker.value?.postMessage({
-  //   type: 'startPrediction',
-  //   modelID: selectedPredictWorker.value,
-  //   modelURL: modelURL,
-  //   h5File: selectedFile.value,
-  //   cellRangePercent: 25,
-  // })
 }
 
 function handleStop() {

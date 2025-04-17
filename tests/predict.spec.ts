@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('navigate to root, click run button, and wait for expected status', async ({ page }) => {
+test('Navigate to root, click run, wait for results', async ({ page }) => {
   // Change the URL if your app runs on a different port or host.
   await page.goto('/')
 

@@ -17,7 +17,8 @@
     "lint:oxlint": "oxlint . --fix -D correctness --ignore-path .gitignore",
     "lint:eslint": "eslint . --fix",
     "lint": "run-s lint:*",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "test:browser": "vitest --workspace=vitest.workspace.ts"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
@@ -33,13 +34,14 @@
     "vuetify": "^3.7.15"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.0",
+    "@playwright/test": "^1.51.1",
     "@tsconfig/node22": "^22.0.0",
     "@types/d3": "^7.4.0",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^22.13.9",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vitejs/plugin-vue-jsx": "^4.1.1",
+    "@vitest/browser": "^3.1.1",
     "@vitest/eslint-plugin": "^1.1.36",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.5.0",
@@ -51,6 +53,7 @@
     "eslint-plugin-vue": "~10.0.0",
     "jiti": "^2.4.2",
     "jsdom": "^26.0.0",
+    "node-fetch": "^3.3.2",
     "npm-run-all2": "^7.0.2",
     "oxlint": "^0.15.13",
     "prettier": "3.5.3",
@@ -61,6 +64,7 @@
     "vite-plugin-static-copy": "^2.3.0",
     "vite-plugin-vue-devtools": "^7.7.2",
     "vitest": "^3.0.8",
+    "vitest-browser-vue": "^0.2.0",
     "vue-tsc": "^2.2.8"
   }
 }
