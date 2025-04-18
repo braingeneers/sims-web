@@ -8,13 +8,6 @@
             <v-app-bar-nav-icon @click="toggleDrawer"></v-app-bar-nav-icon>
           </template>
           <v-list-item-title class="text-h6">Cell Space</v-list-item-title>
-          <template v-slot:append>
-            <v-avatar size="small" color="primary" class="ml-2">
-              <v-img
-                src="https://raw.githubusercontent.com/vuetifyjs/vuetify-loader/next/packages/vuetify-loader/src/logo.svg"
-              ></v-img>
-            </v-avatar>
-          </template>
         </v-list-item>
       </v-list>
 
@@ -146,7 +139,7 @@
       icon="mdi-menu"
       size="large"
       color="primary"
-      style="position: fixed; top: 12px; left: 16px; z-index: 100;"
+      style="position: fixed; top: 12px; left: 16px; z-index: 100"
       @click="toggleDrawer"
       class="floating-menu-btn"
     ></v-btn>
@@ -465,10 +458,10 @@ function handleClusterWorkerMessage(event: MessageEvent) {
       type: 'UMAP',
       summary: `Computed UMAP coordinates in ${processingTime.value.toFixed(2)} seconds`,
     })
-    
+
     // Auto-collapse drawer when finished
     drawerOpen.value = false
-    
+
     // Load the dataset
     loadDataset()
   } else if (type === 'umapError') {
@@ -531,12 +524,17 @@ onUnmounted(() => {
 
 /* Better positioning for the floating menu button */
 .floating-menu-btn {
-  box-shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
+  box-shadow:
+    0 3px 5px -1px rgba(0, 0, 0, 0.2),
+    0 6px 10px 0 rgba(0, 0, 0, 0.14),
+    0 1px 18px 0 rgba(0, 0, 0, 0.12);
   margin: 0;
 }
 
 /* Ensure proper transitions */
 .v-navigation-drawer {
-  transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+  transition:
+    transform 0.3s ease-in-out,
+    width 0.3s ease-in-out;
 }
 </style>
