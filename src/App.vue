@@ -411,6 +411,9 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     const { countFinished, totalToProcess } = event.data
     processingProgress.value = (countFinished / totalToProcess) * 100
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
+  } else if (type === 'predictionOutput') {
+    const { output } = event.data
+    console.log('Prediction Output', output)
   } else if (type === 'finishedPrediction') {
     // Add processing result to analysis results
     analysisResults.value.push({

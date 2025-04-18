@@ -70,34 +70,6 @@ interface PredictionMessage {
   cellRangePercent: number
 }
 
-// interface StatusMessage {
-//   type: 'status'
-//   message: string
-// }
-
-// interface ProgressMessage {
-//   type: 'processingProgress'
-//   message: string
-//   countFinished: number
-//   totalToProcess: number
-// }
-
-// interface FinishedMessage {
-//   type: 'finishedPrediction'
-//   datasetLabel: string
-//   elapsedTime: number
-//   totalProcessed: number
-//   totalNumCells: number
-// }
-
-// interface ErrorMessage {
-//   type: 'predictionError'
-//   error: any
-// }
-
-type WorkerMessage = PredictionMessage
-// type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
-
 interface H5DataSet {
   type: string
   value: any
@@ -145,15 +117,11 @@ const numThreads = navigator.hardwareConcurrency - 1
 // this as well.
 const batchSize = numThreads - 1
 
-// Limit how many UMAP points we calculate which limits memory by limiting the
-// encoding vectors we keep around
-const maxNumCellsToUMAP = 2000
-
 console.log(`Number of threads: ${numThreads}`)
 console.log(`Batch size: ${batchSize}`)
 
 // Handle messages from the main thread
-self.addEventListener('message', async function (event: MessageEvent<WorkerMessage>) {
+self.addEventListener('message', async function (event: MessageEvent<PredictionMessage>) {
   if (event.data.type === 'startPrediction') {
     predict(event.data.modelID, event.data.modelURL, event.data.h5File, event.data.cellRangePercent)
   }
@@ -503,23 +471,23 @@ async function predict(
       // Wait for inference to complete on the current buffer
       const output = await inferencePromise
 
+      self.postMessage({
+        type: 'predictionOutput',
+        output: output,
+      })
+
       // Parse and store results for each cell in the batch
       for (let batchSlot = 0; batchSlot < buffers[activeBuffer].size; batchSlot++) {
-        const overallCellIndex = batchStart + batchSlot
         labels.push([
           Array.from(output.topk_indices.data.slice(batchSlot * 3, batchSlot * 3 + 3)).map(Number),
           new Float32Array(output.probs.data.slice(batchSlot * 3, batchSlot * 3 + 3)),
         ])
 
-        // Only push up to maxNumCellsToUMAP so we limit the memory consumption as these
-        // are 32 float vectors per cell
-        if (overallCellIndex < maxNumCellsToUMAP) {
-          // Each encoding row is shaped by your model: e.g. 16 dims
-          const encSize = output.encoding.dims[1]
-          const encSliceStart = batchSlot * encSize
-          const encSliceEnd = encSliceStart + encSize
-          encodings.push(new Float32Array(output.encoding.data.slice(encSliceStart, encSliceEnd)))
-        }
+        // Each encoding row is shaped by your model: e.g. 16 dims
+        const encSize = output.encoding.dims[1]
+        const encSliceStart = batchSlot * encSize
+        const encSliceEnd = encSliceStart + encSize
+        encodings.push(new Float32Array(output.encoding.data.slice(encSliceStart, encSliceEnd)))
 
         // Add attention into the predicted class accumulator
         for (let i = 0; i < model.genes.length; i++) {
