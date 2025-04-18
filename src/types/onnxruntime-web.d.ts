@@ -6,5 +6,5 @@
 declare module 'onnxruntime-web' {
   // Adjust the path if necessary based on the actual structure
   // within node_modules/onnxruntime-web, but 'types' is common.
-  export * from 'onnxruntime-web/types.d.ts'
+  export { Tensor, InferenceSession, env } from 'onnxruntime-web/types.d.ts'
 }

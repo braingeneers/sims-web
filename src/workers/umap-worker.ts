@@ -49,7 +49,7 @@ type WorkerMessage = UMAPMessage
 type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
 
 // Declare worker scope variables with proper types
-declare const self: DedicatedWorkerGlobalScope
+// declare const self: DedicatedWorkerGlobalScope
 
 // Handle messages from the main thread
 self.addEventListener('message', async function (event: MessageEvent<WorkerMessage>) {

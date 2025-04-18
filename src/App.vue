@@ -200,7 +200,6 @@ async function fetchModels() {
 }
 
 // Workers
-const h5Worker = ref<Worker | null>(null)
 const predictWorker = ref<Worker | null>(null)
 const clusterWorker = ref<Worker | null>(null)
 
@@ -329,26 +328,6 @@ function handleFileSelected(files: File | File[]) {
     selectedFile.value = file
   } else {
     selectedFile.value = null
-  }
-}
-
-function handleH5WorkerMessage(event: MessageEvent) {
-  const { type } = event.data
-
-  if (type === 'buffer') {
-    const { buffer } = event.data
-    console.log('Buffer received:', buffer)
-
-    // Start the pipeline by sending a message to the file worker
-    console.log('Starting prediction with selected model:', selectedPredictWorker.value)
-    const modelURL = `${window.location.protocol}//${window.location.host}/models`
-    predictWorker.value?.postMessage({
-      type: 'startPrediction',
-      modelID: selectedPredictWorker.value,
-      modelURL: modelURL,
-      h5File: selectedFile.value,
-      cellRangePercent: 25,
-    })
   }
 }
 

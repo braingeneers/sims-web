@@ -44,15 +44,15 @@
  * from the h5 file in a separate thread towards keeping all the threads busy.
  */
 import h5wasm from 'h5wasm'
-import * as ort from 'onnxruntime-web'
-// import { InferenceSession, Tensor, env } from 'onnxruntime-web'; // Add other types like Tensor, env as needed
+
+import { InferenceSession, Tensor, env } from 'onnxruntime-web'
 
 import { openDB } from 'idb'
 
 // Define TypeScript interfaces for the worker's data structures
 interface ModelInfo {
   modelID: string
-  session: ort.InferenceSession
+  session: InferenceSession
   genes: string[]
   classes: string[]
 }
@@ -62,13 +62,13 @@ interface Buffer {
   data: Float32Array
 }
 
-// interface PredictionMessage {
-//   type: 'startPrediction'
-//   modelID: string
-//   modelURL: string
-//   h5File: File
-//   cellRangePercent: number
-// }
+interface PredictionMessage {
+  type: 'startPrediction'
+  modelID: string
+  modelURL: string
+  h5File: File
+  cellRangePercent: number
+}
 
 // interface StatusMessage {
 //   type: 'status'
@@ -95,7 +95,7 @@ interface Buffer {
 //   error: any
 // }
 
-// type WorkerMessage = PredictionMessage
+type WorkerMessage = PredictionMessage
 // type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
 
 interface H5DataSet {
@@ -119,10 +119,10 @@ interface H5File {
 }
 
 interface ModelOutput {
-  topk_indices: ort.Tensor
-  probs: ort.Tensor
-  encoding: ort.Tensor
-  attention: ort.Tensor
+  topk_indices: Tensor
+  probs: Tensor
+  encoding: Tensor
+  attention: Tensor
 }
 
 // Dictionary with various model information (id, genes, session)
@@ -227,15 +227,15 @@ async function instantiateModel(modelURL: string, modelID: string): Promise<Mode
   // Initialize ONNX Runtime environment
   self.postMessage({ type: 'status', message: 'Instantiating model...' })
   // See https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html
-  ort.env.wasm.numThreads = numThreads
-  ort.env.wasm.proxy = true
-  const options: ort.InferenceSession.SessionOptions = {
+  env.wasm.numThreads = numThreads
+  env.wasm.proxy = true
+  const options: InferenceSession.SessionOptions = {
     executionProviders: ['wasm'], // alias of 'cpu'
     executionMode: 'parallel',
   }
 
   // Create the InferenceSession with the model ArrayBuffer we fetched incrementally
-  const session = await ort.InferenceSession.create(modelArray.buffer, options)
+  const session = await InferenceSession.create(modelArray.buffer, options)
   console.log('Model Output names', session.outputNames)
 
   return { modelID, session, genes, classes }
@@ -467,7 +467,7 @@ async function predict(
     // Begin processing batches of cells double buffer style
     for (let batchStart = 0; batchStart < cellNames.length; batchStart += batchSize) {
       // Start inference async on the active buffer
-      const inputTensor = new ort.Tensor('float32', buffers[activeBuffer].data, [
+      const inputTensor = new Tensor('float32', buffers[activeBuffer].data, [
         buffers[activeBuffer].size,
         model.genes.length,
       ])
@@ -484,7 +484,7 @@ async function predict(
         buffers[nextBuffer].size = Math.min(nextSize, cellNames.length - nextStart)
         if (nextSize < Math.min(batchSize, cellNames.length)) {
           // On the last batch and its less then full size so we need to
-          // resize the Float32Array for the ort.Tensor creator
+          // resize the Float32Array for the Tensor creator
           buffers[nextBuffer].data = new Float32Array(nextSize * model.genes.length)
         }
         fillBatchData(
