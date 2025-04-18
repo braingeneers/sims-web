@@ -473,7 +473,7 @@ async function predict(
 
       self.postMessage({
         type: 'predictionOutput',
-        output: output,
+        topKIndices: output.topk_indices,
       })
 
       // Parse and store results for each cell in the batch

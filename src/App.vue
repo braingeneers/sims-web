@@ -167,6 +167,13 @@
           </v-card-text>
         </v-card>
 
+        <v-card class="mb-4">
+          <v-card-title>Cell Type Counts</v-card-title>
+          <div v-for="(count, i) in labelCounts" :key="cellName">
+            <strong>{{ i }}:</strong> {{ count }}
+          </div>
+        </v-card>
+
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
@@ -209,6 +216,8 @@ const currentStatus = ref('')
 const processingProgress = ref(0)
 const processingTime = ref(0)
 const processingStartTime = ref(0)
+
+const labelCounts = ref({})
 
 // Model metadata type
 interface ModelMetadata {
@@ -360,6 +369,8 @@ async function runPipeline() {
   await clearResults()
   analysisResults.value = []
 
+  labelCounts.value = {}
+
   isProcessing.value = true
   currentStatus.value = 'Starting pipeline...'
   processingProgress.value = 0
@@ -412,8 +423,16 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     processingProgress.value = (countFinished / totalToProcess) * 100
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'predictionOutput') {
-    const { output } = event.data
-    console.log('Prediction Output', output)
+    const { topKIndices } = event.data
+    console.log('Prediction Output', topKIndices)
+    for (const i of topKIndices.cpuData) {
+      if (i.toString() in labelCounts.value) {
+        labelCounts.value[i.toString()] += 1
+      } else {
+        labelCounts.value[i.toString()] = 1
+      }
+    }
+    console.log(labelCounts.value)
   } else if (type === 'finishedPrediction') {
     // Add processing result to analysis results
     analysisResults.value.push({
