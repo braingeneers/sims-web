@@ -22,31 +22,31 @@ interface UMAPMessage {
   datasetLabel: string
 }
 
-interface StatusMessage {
-  type: 'status'
-  message: string
-}
+// interface StatusMessage {
+//   type: 'status'
+//   message: string
+// }
 
-interface ProgressMessage {
-  type: 'processingProgress'
-  message: string
-  countFinished: number
-  totalToProcess: number
-}
+// interface ProgressMessage {
+//   type: 'processingProgress'
+//   message: string
+//   countFinished: number
+//   totalToProcess: number
+// }
 
-interface FinishedMessage {
-  type: 'finishedUMAP'
-  datasetLabel: string
-  elapsedTime: number
-}
+// interface FinishedMessage {
+//   type: 'finishedUMAP'
+//   datasetLabel: string
+//   elapsedTime: number
+// }
 
-interface ErrorMessage {
-  type: 'umapError'
-  error: any
-}
+// interface ErrorMessage {
+//   type: 'umapError'
+//   error: any
+// }
 
 type WorkerMessage = UMAPMessage
-type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
+// type MainThreadMessage = StatusMessage | ProgressMessage | FinishedMessage | ErrorMessage
 
 // Declare worker scope variables with proper types
 // declare const self: DedicatedWorkerGlobalScope
@@ -83,10 +83,12 @@ async function computeUMAP(datasetLabel: string): Promise<void> {
     const prando = new Prando(42)
     const random = () => prando.next()
 
+    const nEpochs = 400 // Define the number of epochs here
+
     const umap = new UMAP.UMAP({
       random,
       nComponents: 2,
-      nEpochs: 400,
+      nEpochs: nEpochs,
       nNeighbors: 15,
     })
 
@@ -99,7 +101,7 @@ async function computeUMAP(datasetLabel: string): Promise<void> {
           type: 'processingProgress',
           message: `Computing UMAP coordinates...`,
           countFinished: epochNumber,
-          totalToProcess: umap.getNEpochs(),
+          totalToProcess: nEpochs,
         })
       })
     } catch (error) {
