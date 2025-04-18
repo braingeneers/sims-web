@@ -1,98 +1,167 @@
 <template>
   <v-app>
-    <v-app-bar dark fixed>
-      <v-toolbar-title>Cell Space</v-toolbar-title>
+    <!-- Navigation Drawer with hamburger in its header -->
+    <v-navigation-drawer v-model="drawerOpen" :temporary="$vuetify.display.smAndDown" app>
+      <v-list>
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-app-bar-nav-icon @click="toggleDrawer"></v-app-bar-nav-icon>
+          </template>
+          <v-list-item-title class="text-h6">Cell Space</v-list-item-title>
+          <template v-slot:append>
+            <v-avatar size="small" color="primary" class="ml-2">
+              <v-img
+                src="https://raw.githubusercontent.com/vuetifyjs/vuetify-loader/next/packages/vuetify-loader/src/logo.svg"
+              ></v-img>
+            </v-avatar>
+          </template>
+        </v-list-item>
+      </v-list>
 
-      <!-- File Selector -->
-      <v-file-input
-        v-model="selectedFile"
-        accept=".h5ad"
-        variant="underlined"
-        style="max-width: 25%"
-        prepend-icon="mdi-dna"
-        hint="You must select a .h5ad file"
-        @update:model-value="handleFileSelected"
-      >
-        <template v-if="selectedFile" #selection>
-          {{
-            selectedFile.name.length > 30
-              ? selectedFile.name.slice(0, 25) + '...'
-              : selectedFile.name
-          }}</template
-        ></v-file-input
-      >
+      <v-divider></v-divider>
 
-      <!-- Labeling Background Dataset-->
-      <v-select
-        v-model="selectedPredictWorker"
-        :items="predictWorkerOptions"
-        variant="underlined"
-        style="max-width: 25%"
-        prepend-icon="mdi-label-multiple"
-        item-title="title"
-        item-value="value"
-      ></v-select>
+      <v-list density="compact" nav>
+        <!-- File Selector -->
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon>mdi-dna</v-icon>
+          </template>
+          <v-list-item-title>Select File</v-list-item-title>
+          <v-list-item-subtitle v-if="selectedFile">
+            {{
+              selectedFile.name.length > 20
+                ? selectedFile.name.slice(0, 15) + '...'
+                : selectedFile.name
+            }}
+          </v-list-item-subtitle>
+          <template v-slot:append>
+            <v-file-input
+              v-model="selectedFile"
+              accept=".h5ad"
+              hide-details
+              density="compact"
+              variant="plain"
+              class="file-input-hidden"
+              @update:model-value="handleFileSelected"
+            ></v-file-input>
+          </template>
+        </v-list-item>
 
-      <!-- Second Worker Selector -->
-      <v-select
-        v-model="selectedClusterWorker"
-        :items="clusterWorkerOptions"
-        prepend-icon="mdi-scatter-plot"
-        variant="underlined"
-        style="max-width: 25%"
-      ></v-select>
+        <!-- Labeling Background Dataset -->
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon>mdi-label-multiple</v-icon>
+          </template>
+          <v-select
+            v-model="selectedPredictWorker"
+            :items="predictWorkerOptions"
+            variant="plain"
+            density="compact"
+            hide-details
+            item-title="title"
+            item-value="value"
+            class="mt-n2"
+          ></v-select>
+        </v-list-item>
 
-      <!-- Run Button -->
-      <v-app-bar-nav-icon
-        data-cy="run-button"
-        color="primary"
-        @click="runPipeline"
-        :loading="isProcessing"
-        icon="mdi-play"
-      >
-      </v-app-bar-nav-icon>
+        <!-- Second Worker Selector -->
+        <v-list-item>
+          <template v-slot:prepend>
+            <v-icon>mdi-scatter-plot</v-icon>
+          </template>
+          <v-select
+            v-model="selectedClusterWorker"
+            :items="clusterWorkerOptions"
+            variant="plain"
+            density="compact"
+            hide-details
+            class="mt-n2"
+          ></v-select>
+        </v-list-item>
 
-      <!-- Stop Button -->
-      <v-app-bar-nav-icon color="error" @click="handleStop" icon="mdi-stop"></v-app-bar-nav-icon>
-      <v-app-bar-nav-icon @click="toggleTheme">
-        <v-icon>mdi-theme-light-dark</v-icon>
-      </v-app-bar-nav-icon>
-      <template v-if="isProcessing" #extension>
-        <!-- Status Display -->
-        <v-card class="mb-" style="width: 100%" :flat="true">
-          <v-card-text>
-            <v-progress-linear
-              v-if="isProcessing"
-              :model-value="processingProgress"
-              color="primary"
-              height="4"
-            ></v-progress-linear>
-            <p v-if="currentStatus">{{ currentStatus }}</p>
-          </v-card-text>
-        </v-card>
-      </template></v-app-bar
-    >
+        <v-divider class="my-2"></v-divider>
+
+        <!-- Run Button -->
+        <v-list-item @click="runPipeline" :disabled="isProcessing" data-cy="run-button">
+          <template v-slot:prepend>
+            <v-icon color="primary">mdi-play</v-icon>
+          </template>
+          <v-list-item-title>Run</v-list-item-title>
+        </v-list-item>
+
+        <!-- Stop Button -->
+        <v-list-item @click="handleStop" :disabled="!isProcessing">
+          <template v-slot:prepend>
+            <v-icon color="error">mdi-stop</v-icon>
+          </template>
+          <v-list-item-title>Stop</v-list-item-title>
+        </v-list-item>
+
+        <v-divider class="my-2"></v-divider>
+
+        <!-- Theme Toggle -->
+        <v-list-item @click="toggleTheme">
+          <template v-slot:prepend>
+            <v-icon>mdi-theme-light-dark</v-icon>
+          </template>
+          <v-list-item-title>Toggle Theme</v-list-item-title>
+        </v-list-item>
+      </v-list>
+
+      <!-- Processing Progress moved to the bottom -->
+      <template v-slot:append>
+        <div v-if="isProcessing" class="pa-2">
+          <v-progress-linear
+            :model-value="processingProgress"
+            color="primary"
+            height="4"
+          ></v-progress-linear>
+          <div class="text-caption mt-1">{{ currentStatus }}</div>
+        </div>
+
+        <!-- Analysis Progress Timeline in the drawer -->
+        <div v-if="analysisResults.length > 0" class="pa-2 mt-auto">
+          <v-divider class="mb-2"></v-divider>
+          <div class="text-subtitle-2 mb-1">Analysis Progress</div>
+          <v-timeline density="compact" class="analysis-timeline">
+            <v-timeline-item
+              v-for="(result, index) in analysisResults"
+              :key="index"
+              :dot-color="result.type === 'Prediction' ? 'primary' : 'success'"
+              size="x-small"
+              density="compact"
+            >
+              <div class="text-caption">
+                <strong>{{ result.type }}:</strong> {{ result.summary }}
+              </div>
+            </v-timeline-item>
+          </v-timeline>
+        </div>
+      </template>
+    </v-navigation-drawer>
+
+    <!-- Updated floating button to toggle drawer when it's closed -->
+    <v-btn
+      v-if="!drawerOpen"
+      icon="mdi-menu"
+      size="large"
+      color="primary"
+      style="position: fixed; top: 12px; left: 16px; z-index: 100;"
+      @click="toggleDrawer"
+      class="floating-menu-btn"
+    ></v-btn>
 
     <v-main>
       <v-container fluid>
-        <!-- Analysis Results Display -->
-        <v-card v-if="analysisResults.length > 0" class="mb-4">
-          <v-card-title>Analysis Progress</v-card-title>
+        <!-- Start with a welcome message when no analysis has been run -->
+        <v-card v-if="!analysisResults.length && !resultsDB" class="mb-4">
+          <v-card-title>Welcome to Cell Space</v-card-title>
           <v-card-text>
-            <v-timeline v-if="analysisResults.length > 0" density="comfortable">
-              <v-timeline-item
-                v-for="(result, index) in analysisResults"
-                :key="index"
-                :dot-color="result.type === 'Prediction' ? 'primary' : 'success'"
-                size="small"
-              >
-                <template v-slot:opposite>
-                  <strong>{{ result.type }}</strong>
-                </template>
-                <div>{{ result.summary }}</div>
-              </v-timeline-item>
-            </v-timeline>
-            <p v-else>No analysis results yet. Select a file and click the Run button to begin.</p>
+            <p>Use the side menu to select a file and run an analysis.</p>
+            <p class="text-caption">
+              A sample file has been automatically loaded. Click the Run button in the sidebar to
+              process it.
+            </p>
           </v-card-text>
         </v-card>
 
@@ -132,6 +201,14 @@ import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
 import PredictionsTable from './PredictionsTable.vue'
+
+// Drawer state
+const drawerOpen = ref(true)
+
+// Replace drawerMini with toggleDrawer function
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
 
 const theme = useTheme()
 const isProcessing = ref(false)
@@ -388,6 +465,11 @@ function handleClusterWorkerMessage(event: MessageEvent) {
       type: 'UMAP',
       summary: `Computed UMAP coordinates in ${processingTime.value.toFixed(2)} seconds`,
     })
+    
+    // Auto-collapse drawer when finished
+    drawerOpen.value = false
+    
+    // Load the dataset
     loadDataset()
   } else if (type === 'umapError') {
     currentStatus.value = `UMAP Error: ${event.data.error}`
@@ -428,4 +510,33 @@ onUnmounted(() => {
 })
 </script>
 
-<style></style>
+<style>
+.file-input-hidden :deep(.v-field__input) {
+  padding-top: 0;
+}
+
+.file-input-hidden :deep(.v-field__append-inner) {
+  padding-top: 0;
+}
+
+/* Styling for the timeline in the drawer */
+.analysis-timeline {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.analysis-timeline :deep(.v-timeline-item__body) {
+  padding: 4px 0;
+}
+
+/* Better positioning for the floating menu button */
+.floating-menu-btn {
+  box-shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
+  margin: 0;
+}
+
+/* Ensure proper transitions */
+.v-navigation-drawer {
+  transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+}
+</style>
