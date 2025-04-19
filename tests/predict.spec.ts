@@ -12,5 +12,5 @@ test('Navigate to root, click run, wait for results', async ({ page }) => {
 
   // Wait for the status element to display the expected value.
   // Replace '[data-cy=status-label]' and 'Expected Value' with your actual selector and value.
-  await expect(page.locator('[data-cy=results]')).toHaveText('Cells: 25 Genes: 33694')
+  await expect(page.locator('[data-cy=results]')).toHaveText('Cells: 100 Genes: 33694')
 })

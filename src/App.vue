@@ -168,12 +168,37 @@
           </v-card-text>
         </v-card>
 
-        <!-- Cell Type Counts -->
-        <v-card v-if="isProcessing" class="mb-4">
-          <v-card-title>Cell Type Counts</v-card-title>
-          <div v-for="(count, labelIndice) in labelCounts" :key="labelIndice">
-            <strong>{{ labelIndice }}:</strong> {{ count }}
-          </div>
+        <!-- Show chart if processing OR if final results exist -->
+        <cell-type-chart
+          v-if="isProcessing || resultsDB"
+          :is-processing="isProcessing"
+          :dynamic-counts="labelCounts"
+          :final-results="resultsDB"
+          :model-cell-type-names="cellTypeClasses"
+        />
+        <!-- Optionally show model classes list if NOT processing and NO results yet -->
+        <v-card v-else-if="cellTypeClasses.length > 0" class="mb-4">
+          <v-card-title class="d-flex align-center">
+            <div>Available Model Classes</div>
+            <v-spacer></v-spacer>
+            <v-chip class="ml-2" size="small">{{ cellTypeClasses.length }}</v-chip>
+          </v-card-title>
+          <v-card-text>
+            <v-sheet class="cell-type-classes" elevation="0">
+              <v-chip-group>
+                <v-chip
+                  v-for="(className, index) in cellTypeClasses"
+                  :key="index"
+                  :color="index % 2 === 0 ? 'primary' : 'secondary'"
+                  variant="outlined"
+                  size="small"
+                  class="ma-1"
+                >
+                  {{ className }}
+                </v-chip>
+              </v-chip-group>
+            </v-sheet>
+          </v-card-text>
         </v-card>
 
         <!-- Predictions Table -->
@@ -196,13 +221,14 @@
 
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 
 import { openDB } from 'idb'
 
 import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
+import CellTypeChart from './CellTypeChart.vue'
 import PredictionsTable from './PredictionsTable.vue'
 
 // Drawer state
@@ -253,6 +279,8 @@ const selectedClusterWorker = ref('UMAP')
 
 // Model metadata
 const modelMetadata = ref<Record<string, ModelMetadata>>({})
+// Add this new ref to store cell type classes
+const cellTypeClasses = ref<string[]>([])
 
 // Fetch models and their metadata
 async function fetchModels() {
@@ -276,6 +304,27 @@ async function fetchModels() {
   } catch (error) {
     console.error('Error fetching models:', error)
     currentStatus.value = 'Error loading models'
+  }
+}
+
+// Add this new function to fetch cell type classes
+async function fetchCellTypeClasses(modelId: string) {
+  try {
+    currentStatus.value = 'Loading cell type classes...'
+    const modelURL = `${window.location.protocol}//${window.location.host}/models`
+    const response = await fetch(`${modelURL}/${modelId}.classes`)
+
+    if (!response.ok) {
+      throw new Error(`Failed to load classes: ${response.status}`)
+    }
+
+    const text = await response.text()
+    cellTypeClasses.value = text.trim().split('\n')
+    currentStatus.value = `Loaded ${cellTypeClasses.value.length} cell type classes`
+  } catch (error) {
+    console.error('Error loading cell type classes:', error)
+    currentStatus.value = 'Error loading cell type classes'
+    cellTypeClasses.value = []
   }
 }
 
@@ -508,11 +557,23 @@ async function fetchSampleFile() {
   }
 }
 
+// Add a watcher for the selected predict worker
+watch(selectedPredictWorker, (newModelId) => {
+  if (newModelId) {
+    fetchCellTypeClasses(newModelId)
+  }
+})
+
 onMounted(() => {
   loadDataset()
   initializeWorkers()
   fetchModels()
   fetchSampleFile() // Load the sample file when the app mounts
+
+  // Also fetch cell types for the default model
+  if (selectedPredictWorker.value) {
+    fetchCellTypeClasses(selectedPredictWorker.value)
+  }
 })
 
 onUnmounted(() => {
