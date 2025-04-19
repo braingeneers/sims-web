@@ -101,8 +101,9 @@
         </v-list-item>
       </v-list>
 
-      <!-- Processing Progress moved to the bottom -->
+      <!-- Bottom of left side bar -->
       <template v-slot:append>
+        <!-- Processing Progress -->
         <div v-if="isProcessing" class="pa-2">
           <v-progress-linear
             :model-value="processingProgress"
@@ -167,10 +168,11 @@
           </v-card-text>
         </v-card>
 
-        <v-card class="mb-4">
+        <!-- Cell Type Counts -->
+        <v-card v-if="isProcessing" class="mb-4">
           <v-card-title>Cell Type Counts</v-card-title>
-          <div v-for="(count, i) in labelCounts" :key="cellName">
-            <strong>{{ i }}:</strong> {{ count }}
+          <div v-for="(count, labelIndice) in labelCounts" :key="labelIndice">
+            <strong>{{ labelIndice }}:</strong> {{ count }}
           </div>
         </v-card>
 
@@ -197,6 +199,7 @@ import { useTheme } from 'vuetify'
 import { ref, onMounted, onUnmounted } from 'vue'
 
 import { openDB } from 'idb'
+
 import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
@@ -204,8 +207,6 @@ import PredictionsTable from './PredictionsTable.vue'
 
 // Drawer state
 const drawerOpen = ref(true)
-
-// Replace drawerMini with toggleDrawer function
 function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
 }
@@ -217,7 +218,7 @@ const processingProgress = ref(0)
 const processingTime = ref(0)
 const processingStartTime = ref(0)
 
-const labelCounts = ref({})
+const labelCounts = ref<Record<string, number>>({})
 
 // Model metadata type
 interface ModelMetadata {
@@ -388,7 +389,7 @@ async function runPipeline() {
     modelID: selectedPredictWorker.value,
     modelURL: modelURL,
     h5File: selectedFile.value,
-    cellRangePercent: 25,
+    cellRangePercent: 100,
   })
 }
 
@@ -424,15 +425,11 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'predictionOutput') {
     const { topKIndices } = event.data
-    console.log('Prediction Output', topKIndices)
-    for (const i of topKIndices.cpuData) {
-      if (i.toString() in labelCounts.value) {
-        labelCounts.value[i.toString()] += 1
-      } else {
-        labelCounts.value[i.toString()] = 1
-      }
-    }
-    console.log(labelCounts.value)
+    // More idiomatic TypeScript approach
+    topKIndices.cpuData.forEach((index: number) => {
+      const key: string = index.toString()
+      labelCounts.value[key] = (labelCounts.value[key] ?? 0) + 1
+    })
   } else if (type === 'finishedPrediction') {
     // Add processing result to analysis results
     analysisResults.value.push({
@@ -481,7 +478,7 @@ function handleClusterWorkerMessage(event: MessageEvent) {
       summary: `Computed UMAP coordinates in ${processingTime.value.toFixed(2)} seconds`,
     })
 
-    // Auto-collapse drawer when finished
+    // Auto-collapse drawer when finished/
     drawerOpen.value = false
 
     // Load the dataset
