@@ -3,6 +3,7 @@
     "target": "ES2016",
     "useDefineForClassFields": true,
     "module": "ESNext",
+    "sourceMap": true,
     "lib": ["ES2015", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "esModuleInterop": true,

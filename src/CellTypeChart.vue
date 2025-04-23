@@ -134,6 +134,7 @@ const chartData = computed(() => {
           const topPredictionIndex = predictionArray[0]
           // Ensure index is valid for the final cellTypeNames array
           if (
+            props.finalResults &&
             topPredictionIndex >= 0 &&
             topPredictionIndex < props.finalResults.cellTypeNames.length
           ) {

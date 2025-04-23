@@ -118,11 +118,13 @@ def predict(
     all_predictions = np.concatenate(predictions)
 
     # Save the encodings
-    encodings_path = sample_path.with_name(f"{sample_path.stem}-encodings.npy")
+    encodings_path = onnx_model_path.with_name(f"{onnx_model_path.stem}-encodings.npy")
     np.save(encodings_path, all_encodings)
 
     # Save the predictions
-    predictions_path = sample_path.with_name(f"{sample_path.stem}-predictions.npy")
+    predictions_path = onnx_model_path.with_name(
+        f"{onnx_model_path.stem}-predictions.npy"
+    )
     np.save(predictions_path, all_predictions)
 
     typer.echo(f"Saved encodings to {encodings_path}")
@@ -380,6 +382,88 @@ def cluster(
     noise_points = np.sum(cluster_labels == -1)
 
     typer.echo(f"Found {num_clusters} clusters with {noise_points} noise points")
+
+
+@app.command()
+def map(
+    model_path: Path = typer.Argument(..., help="Path to mapper.onnx"),
+    sample_encodings_path: Path = typer.Argument(
+        ..., help="Path to sample-encodings.npy file"
+    ),
+    batch_size: int = typer.Option(
+        32, help="Number of samples to process in each batch"
+    ),
+    num_samples: Optional[int] = typer.Option(
+        None, help="Limit the total number of inputs processed, process all if None"
+    ),
+) -> None:
+    """
+    Map the encodings to 2d coordinates using the mapper onnx model.
+
+    Args:
+        model_path: Path to pumap.onnx
+        sample_encodings_path: Path to sample-encodings.npy file
+        batch_size: Number of samples to process at a time
+        num_samples: Limit the total number of inputs processed, process all if None
+    """
+    typer.echo(f"Mapping samples from {sample_encodings_path} using model {model_path}")
+
+    # Load the cluster model
+    onnx_session = ort.InferenceSession(str(model_path))
+    input_name = onnx_session.get_inputs()[0].name
+    output_name = onnx_session.get_outputs()[0].name
+
+    input_shape = onnx_session.get_inputs()[0].shape
+    output_shape = onnx_session.get_outputs()[0].shape
+    
+    # Load the encodings
+    encodings = np.load(sample_encodings_path)
+
+    # Determine number of samples to process
+    num_encodings = num_samples if num_samples is not None else encodings.shape[0]
+    if num_samples is not None:
+        num_encodings = min(encodings.shape[0], num_samples)
+
+    typer.echo(f"Processing {num_encodings} encodings with batch size {batch_size}")
+
+    # Initialize numpy array to store mappings
+    all_mappings = []
+
+    # Process in batches
+    with tqdm(total=num_encodings) as pbar:
+        for batch_start in range(0, num_encodings, batch_size):
+            batch_end = min(batch_start + batch_size, num_encodings)
+            batch_size_actual = batch_end - batch_start
+
+            # Get batch of encodings
+            batch_encodings = encodings[batch_start:batch_end]
+
+            # Run the model
+            model_input = {input_name: batch_encodings.astype(np.float32)}
+            batch_mappings = onnx_session.run([output_name], model_input)[0]
+
+            # Store the mappings
+            all_mappings.append(batch_mappings)
+
+            pbar.update(batch_size_actual)
+
+    # Combine all batches
+    mappings = np.concatenate(all_mappings)
+
+    # Save the mappings
+    output_path = Path(sample_encodings_path).with_name(
+        f"{Path(sample_encodings_path).stem.replace('-encodings', '')}-mappings.npy"
+    )
+    np.save(output_path, mappings)
+
+    # Flatten the array to [x1, y1, x2, y2, ...]
+    flat_mappings = mappings.flatten()
+    output_path = Path(sample_encodings_path).with_name(
+        f"{Path(sample_encodings_path).stem.replace('-encodings', '')}-mappings.bin"
+    )
+    flat_mappings.tofile(output_path)
+
+    typer.echo(f"Saved mappings to {output_path}")
 
 
 if __name__ == "__main__":

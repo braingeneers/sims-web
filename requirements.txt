@@ -11,7 +11,6 @@ sclblonnx==0.3.0
 netron
 
 typer[all]==0.9.0
-hdbscan>=0.8.29
 anndata>=0.8.0
 tqdm>=4.65.0
 
