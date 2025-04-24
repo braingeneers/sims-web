@@ -274,11 +274,13 @@ const clusterWorkerOptions = ref(['UMAP', 'PUMAP', 'HDBSCAN'])
 
 // Selected options
 const selectedFile = ref<File | null>(null)
-const selectedPredictWorker = ref('default')
+// const selectedPredictWorker = ref('default')
+const selectedPredictWorker = ref('allen-celltypes+human-cortex+various-cortical-areas')
 const selectedClusterWorker = ref('UMAP')
 
 // Model metadata
 const modelMetadata = ref<Record<string, ModelMetadata>>({})
+
 // Add this new ref to store cell type classes
 const cellTypeClasses = ref<string[]>([])
 
@@ -307,24 +309,104 @@ async function fetchModels() {
   }
 }
 
-// Add this new function to fetch cell type classes
+// Fetch the model's classes, mappings, and label pairs
 async function fetchCellTypeClasses(modelId: string) {
+  // Fetch class names
+  const classesResponse = await fetch(`/models/${modelId}.classes`)
+  if (!classesResponse.ok) {
+    throw new Error(`Failed to fetch classes: ${classesResponse.statusText}`)
+  }
+  const classesText = await classesResponse.text()
+  const classes = classesText.trim().split('\n')
+  cellTypeClasses.value = classes
+
+  // Fetch 2D mappings (coordinates for visualization)
+  let mappings = null
+  let labelPairs = null
+
   try {
-    currentStatus.value = 'Loading cell type classes...'
-    const modelURL = `${window.location.protocol}//${window.location.host}/models`
-    const response = await fetch(`${modelURL}/${modelId}.classes`)
+    // Use fetch with appropriate headers to ensure correct binary transfer
+    const mappingsResponse = await fetch(`/models/${modelId}-mappings.bin`, {
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    })
 
-    if (!response.ok) {
-      throw new Error(`Failed to load classes: ${response.status}`)
+    if (mappingsResponse.ok) {
+      // Get the complete ArrayBuffer from the response
+      const mappingsBuffer = await mappingsResponse.arrayBuffer()
+
+      // Check buffer size to verify we got complete data
+      console.log(`Received mappings buffer of ${mappingsBuffer.byteLength} bytes`)
+
+      // Create a properly sized Float32Array view of the buffer
+      // Each pair is 2 float32 values (8 bytes total per pair)
+      const expectedPairs = Math.floor(mappingsBuffer.byteLength / 8)
+      console.log(`Expected number of coordinate pairs: ${expectedPairs}`)
+
+      const mappingsData = new Float32Array(mappingsBuffer)
+
+      // Verify the array length
+      console.log(`Float32Array length: ${mappingsData.length}, expected: ${expectedPairs * 2}`)
+
+      // Convert flat array to array of [x, y] pairs
+      mappings = []
+      for (let i = 0; i < mappingsData.length; i += 2) {
+        if (i + 1 < mappingsData.length) {
+          // Ensure we don't go out of bounds
+          mappings.push([mappingsData[i], mappingsData[i + 1]])
+        }
+      }
+
+      console.log(`Loaded ${mappings.length} 2D coordinates from mappings.bin`)
     }
-
-    const text = await response.text()
-    cellTypeClasses.value = text.trim().split('\n')
-    currentStatus.value = `Loaded ${cellTypeClasses.value.length} cell type classes`
   } catch (error) {
-    console.error('Error loading cell type classes:', error)
-    currentStatus.value = 'Error loading cell type classes'
-    cellTypeClasses.value = []
+    console.warn(`Error fetching mappings: ${error.message}`)
+  }
+
+  // Fetch label pairs (ground truth and prediction)
+  try {
+    const labelsResponse = await fetch(`/models/${modelId}-labels.bin`, {
+      headers: {
+        Accept: 'application/octet-stream',
+      },
+    })
+
+    if (labelsResponse.ok) {
+      const labelsBuffer = await labelsResponse.arrayBuffer()
+
+      // Check buffer size
+      console.log(`Received labels buffer of ${labelsBuffer.byteLength} bytes`)
+
+      // Each pair is 2 int32 values (8 bytes total per pair)
+      const expectedPairs = Math.floor(labelsBuffer.byteLength / 8)
+      console.log(`Expected number of label pairs: ${expectedPairs}`)
+
+      // Create a view of the buffer as Int32Array
+      const labelsData = new Int32Array(labelsBuffer)
+
+      // Verify the array length
+      console.log(`Int32Array length: ${labelsData.length}, expected: ${expectedPairs * 2}`)
+
+      // Convert flat array to array of [groundTruth, prediction] pairs
+      labelPairs = []
+      for (let i = 0; i < labelsData.length; i += 2) {
+        if (i + 1 < labelsData.length) {
+          // Ensure we don't go out of bounds
+          labelPairs.push([labelsData[i], labelsData[i + 1]])
+        }
+      }
+
+      console.log(`Loaded ${labelPairs.length} label pairs from labels.bin`)
+    }
+  } catch (error) {
+    console.warn(`Error fetching label pairs: ${error.message}`)
+  }
+
+  return {
+    classes, // Array of class names
+    mappings, // Array of [x, y] coordinates for each cell
+    labelPairs, // Array of [groundTruth, prediction] class indices for each cell
   }
 }
 

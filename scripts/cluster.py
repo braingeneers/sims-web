@@ -61,6 +61,16 @@ def predict(
     # Create an inflation mapping between model genes and sample genes
     inflation_map = create_inflation_map(adata, onnx_model_path)
 
+    # Read the classes file for the model
+    classes_path = Path(onnx_model_path).with_suffix(".classes")
+    with open(classes_path, "r") as f:
+        classes = [line.strip() for line in f]
+
+    typer.echo(f"Loaded {len(classes)} classes from {classes_path}")
+
+    # Create a mapping from class name to index
+    class_to_idx = {class_name: idx for idx, class_name in enumerate(classes)}
+
     # Determine number of cells to process
     num_cells = num_samples if num_samples is not None else adata.n_obs
     if num_samples is not None:
@@ -71,6 +81,16 @@ def predict(
     # Initialize numpy array to store encodings
     predictions = []
     encodings = []
+    ground_truth_labels = []
+
+    # Check if the "subclass_label" exists in adata.obs
+    if "subclass_label" not in adata.obs:
+        typer.echo(
+            "Warning: 'subclass_label' not found in adata.obs. Using -1 as ground truth labels."
+        )
+        has_ground_truth = False
+    else:
+        has_ground_truth = True
 
     # Process in batches
     with tqdm(total=num_cells) as pbar:
@@ -111,11 +131,26 @@ def predict(
             # Store just the top prediction indice
             predictions.append(batch_predictions[:, 0])
 
+            # Extract ground truth class labels
+            if has_ground_truth:
+                batch_labels = adata.obs["subclass_label"].values[batch_start:batch_end]
+                # Convert class names to indices
+                batch_label_indices = np.array(
+                    [class_to_idx.get(label, -1) for label in batch_labels],
+                    dtype=np.int32,
+                )
+            else:
+                # If no ground truth available, use -1 as placeholder
+                batch_label_indices = np.full(batch_size_actual, -1, dtype=np.int32)
+
+            ground_truth_labels.append(batch_label_indices)
+
             pbar.update(batch_size_actual)
 
     # Combine all batches
     all_encodings = np.vstack(encodings)
     all_predictions = np.concatenate(predictions)
+    all_ground_truth = np.concatenate(ground_truth_labels)
 
     # Save the encodings
     encodings_path = onnx_model_path.with_name(f"{onnx_model_path.stem}-encodings.npy")
@@ -127,8 +162,16 @@ def predict(
     )
     np.save(predictions_path, all_predictions)
 
+    # Create array of (ground_truth, prediction) pairs
+    label_pairs = np.column_stack((all_ground_truth, all_predictions))
+
+    # Save as binary file
+    labels_bin_path = onnx_model_path.with_name(f"{onnx_model_path.stem}-labels.bin")
+    label_pairs.astype(np.int32).flatten().tofile(labels_bin_path)
+
     typer.echo(f"Saved encodings to {encodings_path}")
     typer.echo(f"Saved predictions to {predictions_path}")
+    typer.echo(f"Saved label pairs (ground truth, prediction) to {labels_bin_path}")
 
 
 def create_inflation_map(adata, encoder_model_path: str) -> Dict[int, int]:
@@ -415,7 +458,7 @@ def map(
 
     input_shape = onnx_session.get_inputs()[0].shape
     output_shape = onnx_session.get_outputs()[0].shape
-    
+
     # Load the encodings
     encodings = np.load(sample_encodings_path)
 
