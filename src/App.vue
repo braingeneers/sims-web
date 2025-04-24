@@ -201,6 +201,24 @@
           </v-card-text>
         </v-card>
 
+        <!-- Model Ground Truth Scatter Plot -->
+        <!-- Show this plot if model data is loaded, regardless of processing or resultsDB -->
+        <v-card
+          v-if="modelMappings && modelLabelPairs && cellTypeClasses.length > 0"
+          class="mb-4"
+          data-cy="model-scatter-plot-card"
+        >
+          <v-card-title class="text-subtitle-1">Model Ground Truth Visualization</v-card-title>
+          <v-card-subtitle>Reference distribution for {{ selectedPredictWorker }}</v-card-subtitle>
+          <v-card-text>
+            <scatter-plot
+              :mappings="modelMappings"
+              :label-pairs="modelLabelPairs"
+              :class-names="cellTypeClasses"
+            />
+          </v-card-text>
+        </v-card>
+
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
@@ -229,6 +247,7 @@ import SIMSWorker from './workers/sims-worker.ts?worker'
 import UMAPWorker from './workers/umap-worker.ts?worker'
 
 import CellTypeChart from './CellTypeChart.vue'
+import ScatterPlot from './ScatterPlot.vue'
 import PredictionsTable from './PredictionsTable.vue'
 
 // Drawer state
@@ -283,6 +302,8 @@ const modelMetadata = ref<Record<string, ModelMetadata>>({})
 
 // Add this new ref to store cell type classes
 const cellTypeClasses = ref<string[]>([])
+const modelMappings = ref<number[][] | null>(null)
+const modelLabelPairs = ref<number[][] | null>(null)
 
 // Fetch models and their metadata
 async function fetchModels() {
@@ -358,6 +379,8 @@ async function fetchCellTypeClasses(modelId: string) {
         }
       }
 
+      modelMappings.value = mappings
+
       console.log(`Loaded ${mappings.length} 2D coordinates from mappings.bin`)
     }
   } catch (error) {
@@ -396,6 +419,8 @@ async function fetchCellTypeClasses(modelId: string) {
           labelPairs.push([labelsData[i], labelsData[i + 1]])
         }
       }
+
+      modelLabelPairs.value = labelPairs
 
       console.log(`Loaded ${labelPairs.length} label pairs from labels.bin`)
     }
