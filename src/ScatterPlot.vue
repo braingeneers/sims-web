@@ -1,11 +1,11 @@
 <template>
-  <div ref="chartContainer" style="width: 100%; height: 450px"></div>
+  <div ref="chartContainer" style="width: 100%; height: 450px;"></div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, shallowRef, nextTick } from 'vue'
-import * as echarts from 'echarts/core'
-import { ScatterChart, ScatterSeriesOption } from 'echarts/charts'
+import { ref, onMounted, onUnmounted, watch, shallowRef, nextTick } from 'vue';
+import * as echarts from 'echarts/core';
+import { ScatterChart, ScatterSeriesOption } from 'echarts/charts';
 import {
   TooltipComponent,
   TooltipComponentOption,
@@ -13,10 +13,10 @@ import {
   GridComponentOption,
   VisualMapComponent,
   VisualMapComponentOption,
-  LegendComponent, // Import LegendComponent
-  LegendComponentOption,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
+  LegendComponent,
+  LegendComponentOption
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 
 // Combine option types
 type ECOption = echarts.ComposeOption<
@@ -24,8 +24,8 @@ type ECOption = echarts.ComposeOption<
   | TooltipComponentOption
   | GridComponentOption
   | VisualMapComponentOption
-  | LegendComponentOption // Add Legend option type
->
+  | LegendComponentOption
+>;
 
 // Register necessary components
 echarts.use([
@@ -33,94 +33,116 @@ echarts.use([
   TooltipComponent,
   GridComponent,
   VisualMapComponent,
-  LegendComponent, // Register LegendComponent
-  CanvasRenderer,
-])
+  LegendComponent,
+  CanvasRenderer
+]);
 
 // Props definition
 interface Props {
-  mappings: number[][] // Array of [x, y]
-  labelPairs: number[][] // Array of [groundTruth, prediction]
-  classNames: string[] // Array of class names
+  mappings: number[][];
+  labelPairs: number[][];
+  classNames: string[];
+  themeName: 'light' | 'dark'; // +++ Add theme prop
 }
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
-const chartContainer = ref<HTMLElement | null>(null)
-const chartInstance = shallowRef<echarts.ECharts | null>(null)
+const chartContainer = ref<HTMLElement | null>(null);
+const chartInstance = shallowRef<echarts.ECharts | null>(null);
 
 const prepareChartData = () => {
+  // ... (no changes needed here)
   if (!props.mappings || !props.labelPairs || props.mappings.length !== props.labelPairs.length) {
-    console.warn('ScatterPlot: Mismatched or missing mappings/labelPairs.')
-    return []
+    console.warn('ScatterPlot: Mismatched or missing mappings/labelPairs.');
+    return [];
   }
-  // Combine mappings and the ground truth label index
-  // Format: [x, y, groundTruthClassIndex]
-  return props.mappings
-    .map((coord, index) => {
-      // Ensure labelPairs[index] and labelPairs[index][0] exist
-      const groundTruthIndex = props.labelPairs[index]?.[0]
-      if (typeof groundTruthIndex !== 'number') {
-        console.warn(`ScatterPlot: Missing ground truth index at index ${index}`)
-        // Handle missing data, e.g., assign a specific index or filter out
-        return null // Or assign a default like [coord[0], coord[1], -1]
-      }
-      return [
+  return props.mappings.map((coord, index) => {
+     const groundTruthIndex = props.labelPairs[index]?.[0];
+     if (typeof groundTruthIndex !== 'number') {
+        console.warn(`ScatterPlot: Missing ground truth index at index ${index}`);
+        return null;
+     }
+     return [
         coord[0], // x
         coord[1], // y
-        groundTruthIndex, // ground truth class index
-      ]
-    })
-    .filter((item) => item !== null) as number[][] // Filter out null entries if any
-}
+        groundTruthIndex // ground truth class index
+     ];
+  }).filter(item => item !== null) as number[][];
+};
+
+// Function to initialize or re-initialize the chart
+const initChart = () => {
+  if (chartContainer.value) {
+    // Dispose the old instance if it exists
+    chartInstance.value?.dispose();
+    console.log(`ScatterPlot: Initializing chart with theme: ${props.themeName}`);
+    // Initialize with the theme name
+    chartInstance.value = echarts.init(chartContainer.value, props.themeName); // <-- Use theme name here
+    // Add resize listener for the new instance
+    chartInstance.value.resize(); // Initial resize call
+    if (resizeObserver && chartContainer.value) {
+        // Ensure observer is observing the correct container (should be the same)
+        // resizeObserver.unobserve(chartContainer.value); // Might not be needed if container ref doesn't change
+        resizeObserver.observe(chartContainer.value);
+    }
+  } else {
+    console.error('ScatterPlot: Chart container not found during init.');
+  }
+};
+
 
 const updateChart = () => {
-  if (!chartContainer.value || !props.classNames.length) {
-    console.log('ScatterPlot: Chart container or classNames not ready.')
-    return
+  // Ensure instance exists (it should after initChart)
+  if (!chartInstance.value || !props.classNames.length) {
+     console.log('ScatterPlot: Chart instance or classNames not ready for update.');
+     // Attempt to initialize if container exists but instance doesn't (e.g., initial load)
+     if (chartContainer.value && !chartInstance.value) {
+        console.log('ScatterPlot: Instance missing, attempting initialization.');
+        initChart();
+        // If initChart failed, chartInstance might still be null
+        if (!chartInstance.value) return;
+     } else if (!chartInstance.value) {
+        return; // Exit if still no instance
+     }
   }
 
-  const chartData = prepareChartData()
+
+  const chartData = prepareChartData();
   if (!chartData.length) {
-    // Clear chart if no data
-    chartInstance.value?.clear()
-    console.log('ScatterPlot: No data to display.')
-    return
+    chartInstance.value?.clear();
+    console.log('ScatterPlot: No data to display.');
+    return;
   }
 
-  if (!chartInstance.value) {
-    chartInstance.value = echarts.init(chartContainer.value)
-    console.log('ScatterPlot: ECharts instance initialized.')
-  }
-
+  // --- Chart Options ---
+  // (No changes needed in the options object itself,
+  // ECharts applies theme colors automatically)
   const option: ECOption = {
     tooltip: {
       trigger: 'item',
       formatter: (params: any) => {
-        // params.value should be [x, y, classIndex]
-        if (!params.value || params.value.length < 3) return ''
-        const classIndex = params.value[2]
-        const className = props.classNames[classIndex] ?? 'Unknown'
-        const coords = params.value
-        return `Class: ${className} (Index: ${classIndex})<br/>Coords: (${coords[0].toFixed(2)}, ${coords[1].toFixed(2)})`
-      },
+        if (!params.value || params.value.length < 3) return '';
+        const classIndex = params.value[2];
+        const className = props.classNames[classIndex] ?? 'Unknown';
+        const coords = params.value;
+        return `Class: ${className} (Index: ${classIndex})<br/>Coords: (${coords[0].toFixed(2)}, ${coords[1].toFixed(2)})`;
+      }
     },
     grid: {
-      left: '3%',
-      right: '10%', // Increased space for visualMap
-      bottom: '3%',
-      containLabel: true,
+      left: '1%',
+      right: '10%',
+      bottom: '1%',
+      top: '1%',
+      containLabel: false,
     },
     xAxis: {
+      show: false,
       type: 'value',
       splitLine: { show: false },
-      axisLabel: { show: false }, // Hide axis labels for cleaner look
-      axisTick: { show: false }, // Hide axis ticks
     },
     yAxis: {
+      show: false,
       type: 'value',
       splitLine: { show: false },
-      axisLabel: { show: false }, // Hide axis labels
-      axisTick: { show: false }, // Hide axis ticks
     },
     visualMap: {
       type: 'piecewise',
@@ -129,82 +151,96 @@ const updateChart = () => {
       top: 'center',
       min: 0,
       max: props.classNames.length - 1,
-      dimension: 2, // Map color based on the 3rd value in data (class index)
+      dimension: 2,
       pieces: props.classNames.map((name, index) => ({
-        value: index,
-        label: name.length > 25 ? name.slice(0, 22) + '...' : name, // Shorten long labels
-        // ECharts assigns colors automatically
+         value: index,
+         label: name.length > 25 ? name.slice(0, 22) + '...' : name,
+         // Color is handled by the theme or default ECharts palette
       })),
       textStyle: {
-        fontSize: 10,
+         fontSize: 10
+         // Text color will be adapted by the theme
       },
       itemWidth: 15,
       itemHeight: 10,
-      precision: 0, // Ensure integer matching for pieces
-      realtime: false, // Update view only when interaction ends
-      hoverLink: false, // Disable hover linkage for performance with many pieces
+      precision: 0,
+      realtime: false,
+      hoverLink: false
     },
     series: [
       {
         name: 'Cell Types (Ground Truth)',
         type: 'scatter',
-        symbolSize: 4, // Smaller points for potentially large datasets
+        symbolSize: 4,
         data: chartData,
         emphasis: {
           focus: 'series',
-          scale: 1.5, // Slightly enlarge points on hover
+          scale: 1.5
         },
-        large: true, // Enable large-scale optimization
-        largeThreshold: 2000, // Threshold to enable optimization
-      },
-    ],
-  }
-  console.log('ScatterPlot: Setting options.')
-  chartInstance.value.setOption(option, true) // `true` to not merge options
-}
+        large: true,
+        largeThreshold: 2000
+      }
+    ]
+  };
+  console.log('ScatterPlot: Setting options.');
+  chartInstance.value.setOption(option, true);
+};
 
 // Resize observer
-let resizeObserver: ResizeObserver | null = null
-onMounted(() => {
-  // Ensure the DOM element is ready before initializing
-  nextTick(() => {
-    if (chartContainer.value) {
-      console.log('ScatterPlot: Component mounted, initializing chart.')
-      updateChart() // Initial render
+let resizeObserver: ResizeObserver | null = null;
 
-      resizeObserver = new ResizeObserver(() => {
-        chartInstance.value?.resize()
-      })
-      resizeObserver.observe(chartContainer.value)
-    } else {
-      console.error('ScatterPlot: Chart container not found on mount.')
-    }
-  })
-})
+onMounted(() => {
+  nextTick(() => {
+      if (chartContainer.value) {
+         console.log('ScatterPlot: Component mounted, initializing chart.');
+         initChart(); // Initialize with the current theme
+         updateChart(); // Apply options
+
+         resizeObserver = new ResizeObserver(() => {
+           // Use a debounce mechanism if resize events fire too rapidly
+           chartInstance.value?.resize();
+         });
+         resizeObserver.observe(chartContainer.value);
+      } else {
+         console.error('ScatterPlot: Chart container not found on mount.');
+      }
+  });
+});
 
 onUnmounted(() => {
-  console.log('ScatterPlot: Component unmounted, disposing chart.')
-  resizeObserver?.disconnect()
-  chartInstance.value?.dispose()
-  chartInstance.value = null
-})
+  console.log('ScatterPlot: Component unmounted, disposing chart.');
+  resizeObserver?.disconnect();
+  chartInstance.value?.dispose();
+  chartInstance.value = null;
+});
 
-// Watch for prop changes to update the chart
+// Watch for prop changes to update the chart data
 watch(
   () => [props.mappings, props.labelPairs, props.classNames],
   () => {
-    console.log('ScatterPlot: Props changed, updating chart.')
-    // Use nextTick to ensure DOM updates (if any) are flushed before chart update
-    nextTick(updateChart)
+     console.log('ScatterPlot: Data props changed, updating chart.');
+     nextTick(updateChart); // Update options/data
   },
-  { deep: true }, // Use deep watch cautiously, might be performance intensive if props are large/complex
-)
+  { deep: true }
+);
+
+// +++ Watch for theme changes +++
+watch(
+  () => props.themeName,
+  (newTheme, oldTheme) => {
+    if (newTheme !== oldTheme && chartContainer.value) {
+      console.log(`ScatterPlot: Theme changed to ${newTheme}. Re-initializing chart.`);
+      // Re-initialize with the new theme and re-apply options
+      nextTick(() => {
+          initChart();
+          updateChart();
+      });
+    }
+  }
+);
+
 </script>
 
 <style scoped>
-/* Add any specific styles if needed */
-div {
-  border: 1px solid rgba(128, 128, 128, 0.2); /* Optional: subtle border */
-  border-radius: 4px;
-}
+/* ... */
 </style>
