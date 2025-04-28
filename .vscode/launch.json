@@ -33,6 +33,19 @@
       ]
     },
     {
+      "name": "Python cluster train",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/cluster.py",
+      "console": "integratedTerminal",
+      "args": [
+        "train",
+        "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas-encodings.npy",
+        "--num-encodings",
+        "100"
+      ]
+    },
+    {
       "name": "Python cluster map",
       "type": "debugpy",
       "request": "launch",

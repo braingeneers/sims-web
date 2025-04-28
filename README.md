@@ -5,7 +5,7 @@ sims-web.next()
 Refactor to support a labeling and unsupervised clustering workflow
 
 # Adding a model
-Given a model.ckpt and pumap.onnx 
+Given a model.ckpt and train.h5ad
 
 # Datasets & Models
 
