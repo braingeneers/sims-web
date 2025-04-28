@@ -2,6 +2,13 @@ venv
 checkpoints
 data
 
+lightning_logs
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+
 .tsbuildinfo.*
 
 # Logs
@@ -20,24 +27,7 @@ dist-ssr
 coverage
 *.local
 
-/cypress/videos/
-/cypress/screenshots/
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-!.vscode/launch.json
-.idea
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-*.tsbuildinfo
-
 test-results/
-playwright-report/
 
 # Playwright
 /playwright-report/

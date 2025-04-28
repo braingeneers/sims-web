@@ -6,8 +6,6 @@ This script provides functionality to encode and cluster single cell expression 
 using ONNX models with PyTorch computation backend.
 """
 
-import os
-import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Union
 
@@ -17,6 +15,7 @@ import typer
 import onnxruntime as ort
 import hdbscan
 import anndata as ad
+import scanpy as sc
 from torch import nn
 from tqdm import tqdm
 
@@ -55,8 +54,15 @@ def predict(
     input_shape = model_session.get_inputs()[0].shape
     model_input_size = input_shape[1] if len(input_shape) > 1 else input_shape[0]
 
-    # Load the sample data
+    # Load the sample data and preprocess it
+    typer.echo(f"Loading sample data and preprocessing from {sample_path}...")
     adata = ad.read_h5ad(sample_path)
+    sc.pp.filter_cells(adata, min_genes=100)
+    sc.pp.filter_genes(adata, min_cells=3)
+    sc.pp.normalize_total(adata)
+    ### Logarithmizing the data
+    sc.pp.log1p(adata)
+    sc.pp.scale(adata)
 
     # Create an inflation mapping between model genes and sample genes
     inflation_map = create_inflation_map(adata, onnx_model_path)

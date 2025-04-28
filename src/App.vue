@@ -179,8 +179,8 @@
           <v-card-subtitle>Reference distribution for {{ selectedPredictWorker }}</v-card-subtitle>
           <v-card-text>
             <scatter-plot
-              :mappings="modelMappings.slice(0, 1000)"
-              :label-pairs="modelLabelPairs.slice(0, 1000)"
+              :mappings="modelMappings"
+              :label-pairs="modelLabelPairs"
               :class-names="cellTypeClasses"
               :theme-name="theme.global.name.value"
             />

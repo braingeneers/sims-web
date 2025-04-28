@@ -5,18 +5,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python make-input-dynamic.py",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/scripts/make-input-dynamic.py",
-      "console": "integratedTerminal",
-      "args": [
-        "${workspaceFolder}/checkpoints/allen-celltypes+human-cortex+various-cortical-areas-pumap.onnx",
-        "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas-pumap.onnx"
-      ]
-    },
-    {
-      "name": "Python cluster predict",
+      "name": "Python cluster predict training dataset",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/scripts/cluster.py",
@@ -26,7 +15,21 @@
         "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas.onnx",
         "${workspaceFolder}/checkpoints/allen-celltypes+human-cortex+various-cortical-areas.h5ad",
         "--num-samples",
-        "100"
+        "1000"
+      ]
+    },
+    {
+      "name": "Python cluster predict test dataset",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/cluster.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict",
+        "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas.onnx",
+        "${workspaceFolder}/data/allen-celltypes+human-cortex+m1.h5ad",
+        "--num-samples",
+        "1000"
       ]
     },
     {
@@ -40,7 +43,7 @@
         "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas-pumap.onnx",
         "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas-encodings.npy",
         "--num-samples",
-        "100"
+        "1000"
       ]
     },
     {
