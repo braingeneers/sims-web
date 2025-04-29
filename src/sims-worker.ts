@@ -48,13 +48,15 @@ import h5wasm from 'h5wasm'
 import { InferenceSession, Tensor, env } from 'onnxruntime-web'
 
 import { openDB } from 'idb'
+import { map } from 'd3'
 
 // Define TypeScript interfaces for the worker's data structures
 interface ModelInfo {
   modelID: string
-  session: InferenceSession
+  predictSession: InferenceSession
   genes: string[]
   classes: string[]
+  mappingSession: InferenceSession
 }
 
 interface Buffer {
@@ -90,11 +92,15 @@ interface H5File {
   close(): void
 }
 
-interface ModelOutput {
+interface PredictionOutput {
   topk_indices: Tensor
   probs: Tensor
   encoding: Tensor
   attention: Tensor
+}
+
+interface MappingOutput {
+  output: Tensor
 }
 
 // Dictionary with various model information (id, genes, session)
@@ -203,10 +209,14 @@ async function instantiateModel(modelURL: string, modelID: string): Promise<Mode
   }
 
   // Create the InferenceSession with the model ArrayBuffer we fetched incrementally
-  const session = await InferenceSession.create(modelArray.buffer, options)
-  console.log('Model Output names', session.outputNames)
+  const predictSession = await InferenceSession.create(modelArray.buffer, options)
+  console.log('Model Output names', predictSession.outputNames)
 
-  return { modelID, session, genes, classes }
+  // Create the MappingSession
+  const mappingSession = await InferenceSession.create(`${modelURL}/${modelID}-pumap.onnx`, options)
+  console.log('Mapper Output names', mappingSession.outputNames)
+
+  return { modelID, predictSession, genes, classes, mappingSession }
 }
 
 /*
@@ -399,6 +409,8 @@ async function predict(
 
     const labels: [number[], Float32Array][] = []
     const encodings: Float32Array[] = []
+    const coordinates: number[][] = []
+
     const inflationIndices = precomputeInflationIndices(model.genes, sampleGenes)
 
     const startTime = Date.now() // Record start time
@@ -439,9 +451,9 @@ async function predict(
         buffers[activeBuffer].size,
         model.genes.length,
       ])
-      const inferencePromise = model.session.run({
+      const inferencePromise = model.predictSession.run({
         input: inputTensor,
-      }) as Promise<ModelOutput>
+      }) as Promise<PredictionOutput>
 
       // Fill next buffer while inference runs asynchronously
       const nextBuffer = (activeBuffer + 1) % 2
@@ -476,6 +488,11 @@ async function predict(
         topKIndices: output.topk_indices,
       })
 
+      // While we're unpacking the inference kick off 2d mapping in the background
+      const mappingPromise = model.mappingSession.run({
+        input: output.encoding,
+      }) as Promise<MappingOutput>
+
       // Parse and store results for each cell in the batch
       for (let batchSlot = 0; batchSlot < buffers[activeBuffer].size; batchSlot++) {
         labels.push([
@@ -495,6 +512,16 @@ async function predict(
           attentionAccumulators![classIndex * model.genes.length + i] +=
             output.attention.data[batchSlot * model.genes.length + i]
         }
+      }
+
+      // Now parse the mappings which should have computed while the above loop was running
+      const mappings = await mappingPromise
+      console.log(`Mapping output: ${mappings.output.dims} ${mappings.output.data.length}`)
+
+      // Reshape into an array of 2D for the plotting packages
+      for (let i = 0; i < mappings.output.dims[0]; i++) {
+        const startIndex = i * 2 // Calculate startIndex for [x, y] pair
+        coordinates.push([mappings.output.data[startIndex], mappings.output.data[startIndex + 1]])
       }
 
       // Post progress update
@@ -566,6 +593,7 @@ async function predict(
       predictions: labels.map((label) => label[0]),
       probabilities: labels.map((label) => label[1]),
       encodings: encodings.flat(),
+      coords: coordinates.flat(),
     })
     await tx.done
     db.close()

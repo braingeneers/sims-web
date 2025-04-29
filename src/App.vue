@@ -40,34 +40,19 @@
           </template>
         </v-list-item>
 
-        <!-- Labeling Background Dataset -->
+        <!-- Background Dataset and Model Selector -->
         <v-list-item>
           <template v-slot:prepend>
             <v-icon>mdi-label-multiple</v-icon>
           </template>
           <v-select
-            v-model="selectedPredictWorker"
-            :items="predictWorkerOptions"
+            v-model="selectedDataset"
+            :items="datasetOptions"
             variant="plain"
             density="compact"
             hide-details
             item-title="title"
             item-value="value"
-            class="mt-n2"
-          ></v-select>
-        </v-list-item>
-
-        <!-- Second Worker Selector -->
-        <v-list-item>
-          <template v-slot:prepend>
-            <v-icon>mdi-scatter-plot</v-icon>
-          </template>
-          <v-select
-            v-model="selectedClusterWorker"
-            :items="clusterWorkerOptions"
-            variant="plain"
-            density="compact"
-            hide-details
             class="mt-n2"
           ></v-select>
         </v-list-item>
@@ -176,7 +161,7 @@
           data-cy="model-scatter-plot-card"
         >
           <v-card-title class="text-subtitle-1">Model Ground Truth Visualization</v-card-title>
-          <v-card-subtitle>Reference distribution for {{ selectedPredictWorker }}</v-card-subtitle>
+          <v-card-subtitle>Reference distribution for {{ selectedDataset }}</v-card-subtitle>
           <v-card-text>
             <scatter-plot
               :mappings="modelMappings"
@@ -244,8 +229,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 
 import { openDB } from 'idb'
 
-import SIMSWorker from './workers/sims-worker.ts?worker'
-import UMAPWorker from './workers/umap-worker.ts?worker'
+import SIMSWorker from './sims-worker.ts?worker'
 
 import CellTypeChart from './CellTypeChart.vue'
 import ScatterPlot from './ScatterPlot.vue'
@@ -289,14 +273,11 @@ interface Dataset {
 }
 
 // Available files and workers
-const predictWorkerOptions = ref<{ title: string; value: string }[]>([])
-const clusterWorkerOptions = ref(['UMAP', 'PUMAP', 'HDBSCAN'])
+const datasetOptions = ref<{ title: string; value: string }[]>([])
 
 // Selected options
 const selectedFile = ref<File | null>(null)
-// const selectedPredictWorker = ref('default')
-const selectedPredictWorker = ref('allen-celltypes+human-cortex+various-cortical-areas')
-const selectedClusterWorker = ref('UMAP')
+const selectedDataset = ref('allen-celltypes+human-cortex+various-cortical-areas')
 
 // Model metadata
 const modelMetadata = ref<Record<string, ModelMetadata>>({})
@@ -321,7 +302,7 @@ async function fetchModels() {
     }
 
     modelMetadata.value = metadata
-    predictWorkerOptions.value = modelIds.map((id) => ({
+    datasetOptions.value = modelIds.map((id) => ({
       title: metadata[id].title || id,
       value: id,
     }))
@@ -438,7 +419,6 @@ async function fetchCellTypeClasses(modelId: string) {
 
 // Workers
 const predictWorker = ref<Worker | null>(null)
-const clusterWorker = ref<Worker | null>(null)
 
 // Results
 const analysisResults = ref<
@@ -510,10 +490,6 @@ function initializeWorkers() {
   // Create SIMS worker
   predictWorker.value = new SIMSWorker()
   predictWorker.value.onmessage = handlePredictWorkerMessage
-
-  // Create UMAP worker
-  clusterWorker.value = new UMAPWorker()
-  clusterWorker.value.onmessage = handleClusterWorkerMessage
 }
 
 async function runPipeline() {
@@ -535,7 +511,7 @@ async function runPipeline() {
   processingStartTime.value = Date.now()
 
   // Initialize workers if needed
-  if (!predictWorker.value || !clusterWorker.value) {
+  if (!predictWorker.value) {
     initializeWorkers()
   }
 
@@ -543,7 +519,7 @@ async function runPipeline() {
   const modelURL = `${window.location.protocol}//${window.location.host}/models`
   predictWorker.value?.postMessage({
     type: 'startPrediction',
-    modelID: selectedPredictWorker.value,
+    modelID: selectedDataset.value,
     modelURL: modelURL,
     h5File: selectedFile.value,
     cellRangePercent: 100,
@@ -553,7 +529,6 @@ async function runPipeline() {
 function handleStop() {
   // Terminate workers
   predictWorker.value?.terminate()
-  clusterWorker.value?.terminate()
   // Reinitialize workers
   initializeWorkers()
   isProcessing.value = false
@@ -594,33 +569,6 @@ function handlePredictWorkerMessage(event: MessageEvent) {
       summary: `Processed ${event.data.totalProcessed} items in ${((Date.now() - processingStartTime.value) / 1000).toFixed(2)} seconds`,
     })
 
-    // Reset progress bar for UMAP
-    processingProgress.value = 0
-    processingStartTime.value = Date.now()
-
-    // Start UMAP computation
-    currentStatus.value = 'Starting UMAP computation...'
-    clusterWorker.value?.postMessage({
-      type: 'startUMAP',
-      datasetLabel: event.data.datasetLabel,
-    })
-  } else if (type === 'predictionError') {
-    currentStatus.value = message
-    isProcessing.value = false
-  }
-}
-
-function handleClusterWorkerMessage(event: MessageEvent) {
-  const { type, message } = event.data
-
-  if (type === 'status') {
-    currentStatus.value = message
-  } else if (type === 'processingProgress') {
-    // Update progress based on countFinished and totalToProcess
-    const { countFinished, totalToProcess } = event.data
-    processingProgress.value = (countFinished / totalToProcess) * 100
-    currentStatus.value = `UMAP: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
-  } else if (type === 'finishedUMAP') {
     // Calculate processing time
     processingTime.value = (Date.now() - processingStartTime.value) / 1000
 
@@ -631,17 +579,17 @@ function handleClusterWorkerMessage(event: MessageEvent) {
 
     // Add processing result to analysis results
     analysisResults.value.push({
-      type: 'UMAP',
-      summary: `Computed UMAP coordinates in ${processingTime.value.toFixed(2)} seconds`,
+      type: 'Overall',
+      summary: `Processed ${event.data.totalProcessed} items in ${processingTime.value.toFixed(2)} seconds`,
     })
 
     // Auto-collapse drawer when finished/
-    drawerOpen.value = false
+    // drawerOpen.value = false
 
     // Load the dataset
     loadDataset()
-  } else if (type === 'umapError') {
-    currentStatus.value = `UMAP Error: ${event.data.error}`
+  } else if (type === 'predictionError') {
+    currentStatus.value = message
     isProcessing.value = false
   }
 }
@@ -666,7 +614,7 @@ async function fetchSampleFile() {
 }
 
 // Add a watcher for the selected predict worker
-watch(selectedPredictWorker, (newModelId) => {
+watch(selectedDataset, (newModelId) => {
   if (newModelId) {
     fetchCellTypeClasses(newModelId)
   }
@@ -679,15 +627,14 @@ onMounted(() => {
   fetchSampleFile() // Load the sample file when the app mounts
 
   // Also fetch cell types for the default model
-  if (selectedPredictWorker.value) {
-    fetchCellTypeClasses(selectedPredictWorker.value)
+  if (selectedDataset.value) {
+    fetchCellTypeClasses(selectedDataset.value)
   }
 })
 
 onUnmounted(() => {
   // Clean up workers
   predictWorker.value?.terminate()
-  clusterWorker.value?.terminate()
 })
 </script>
 
