@@ -153,25 +153,6 @@
           </v-card-text>
         </v-card>
 
-        <!-- Model Ground Truth Scatter Plot -->
-        <!-- Show this plot if model data is loaded, regardless of processing or resultsDB -->
-        <v-card
-          v-if="modelMappings && modelLabelPairs && cellTypeClasses.length > 0"
-          class="mb-4"
-          data-cy="model-scatter-plot-card"
-        >
-          <v-card-title class="text-subtitle-1">Model Ground Truth Visualization</v-card-title>
-          <v-card-subtitle>Reference distribution for {{ selectedDataset }}</v-card-subtitle>
-          <v-card-text>
-            <scatter-plot
-              :mappings="modelMappings"
-              :label-pairs="modelLabelPairs"
-              :class-names="cellTypeClasses"
-              :theme-name="theme.global.name.value"
-            />
-          </v-card-text>
-        </v-card>
-
         <!-- Show chart if processing OR if final results exist -->
         <cell-type-chart
           v-if="isProcessing || resultsDB"
@@ -180,6 +161,7 @@
           :final-results="resultsDB"
           :model-cell-type-names="cellTypeClasses"
         />
+
         <!-- Optionally show model classes list if NOT processing and NO results yet -->
         <v-card v-else-if="cellTypeClasses.length > 0" class="mb-4">
           <v-card-title class="d-flex align-center">
@@ -204,6 +186,44 @@
             </v-sheet>
           </v-card-text>
         </v-card>
+        <!-- Prediction Visualization Scatter Plot -->
+        <v-card
+          v-if="resultsDB && predictedCoords && predictedLabelPairs"
+          class="mb-4"
+          data-cy="prediction-scatter-plot-card"
+        >
+          <v-card-title class="text-subtitle-1">Prediction Visualization</v-card-title>
+          <v-card-subtitle>
+            2D projection of input cells colored by predicted type
+          </v-card-subtitle>
+          <v-card-text>
+            <scatter-plot
+              :mappings="predictedCoords"
+              :label-pairs="predictedLabelPairs"
+              :class-names="resultsDB.cellTypeNames"
+              :theme-name="theme.global.name.value"
+            />
+          </v-card-text>
+        </v-card>
+
+        <!-- Model Ground Truth Scatter Plot -->
+        <!-- Show this plot if model data is loaded, regardless of processing or resultsDB -->
+        <v-card
+          v-if="modelMappings && modelLabelPairs && cellTypeClasses.length > 0"
+          class="mb-4"
+          data-cy="model-scatter-plot-card"
+        >
+          <v-card-title class="text-subtitle-1">Model Ground Truth Visualization</v-card-title>
+          <v-card-subtitle>Reference distribution for {{ selectedDataset }}</v-card-subtitle>
+          <v-card-text>
+            <scatter-plot
+              :mappings="modelMappings"
+              :label-pairs="modelLabelPairs"
+              :class-names="cellTypeClasses"
+              :theme-name="theme.global.name.value"
+            />
+          </v-card-text>
+        </v-card>
 
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
@@ -225,7 +245,7 @@
 
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 
 import { openDB } from 'idb'
 
@@ -464,12 +484,15 @@ async function loadDataset() {
     const keys = await db.getAllKeys('datasets')
     if (keys.length > 0) {
       resultsDB.value = await db.get('datasets', keys[0])
+    } else {
+      resultsDB.value = null // Clear if no data found
     }
 
     db.close()
   } catch (error) {
     console.error('Database error:', error)
     currentStatus.value = 'Error accessing database'
+    resultsDB.value = null // Clear on error
   }
 }
 
@@ -618,6 +641,36 @@ watch(selectedDataset, (newModelId) => {
   if (newModelId) {
     fetchCellTypeClasses(newModelId)
   }
+})
+
+// +++ START: Computed properties for prediction plot data +++
+const predictedCoords = computed<number[][] | null>(() => {
+  if (!resultsDB.value?.coords) return null
+  const coords: number[][] = []
+  // The coords array is flat [x1, y1, x2, y2, ...], convert to [[x1, y1], [x2, y2], ...]
+  for (let i = 0; i < resultsDB.value.coords.length; i += 2) {
+    if (i + 1 < resultsDB.value.coords.length) {
+      coords.push([resultsDB.value.coords[i], resultsDB.value.coords[i + 1]])
+    }
+  }
+  // Ensure the number of coordinates matches the number of cells/predictions
+  if (resultsDB.value.predictions && coords.length !== resultsDB.value.predictions.length) {
+    console.warn(
+      'Prediction Scatter Plot: Mismatch between number of coordinates and predictions.',
+      `Coords length: ${coords.length}, Predictions length: ${resultsDB.value.predictions.length}`,
+    )
+    // Return only coordinates that have a corresponding prediction
+    return coords.slice(0, resultsDB.value.predictions.length)
+  }
+  return coords
+})
+
+const predictedLabelPairs = computed<number[][] | null>(() => {
+  if (!resultsDB.value?.predictions) return null
+  // ScatterPlot uses the first element of the pair for coloring via visualMap dimension 2
+  // We want to color by the top prediction (index 0 in the predictions array for each cell)
+  // The second element is not used for coloring in the current ScatterPlot setup.
+  return resultsDB.value.predictions.map((predictionArray) => [predictionArray[0], -1]) // Use top prediction index
 })
 
 onMounted(() => {
