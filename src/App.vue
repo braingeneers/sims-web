@@ -334,14 +334,14 @@ const modelLabelPairs = ref<number[][] | null>(null)
 // Fetch models and their metadata
 async function fetchModels() {
   try {
-    const modelsResponse = await fetch('/models/models.txt')
+    const modelsResponse = await fetch('models/models.txt')
     const modelsText = await modelsResponse.text()
     const modelIds = modelsText.trim().split('\n')
 
     // Fetch metadata for each model
     const metadata: Record<string, ModelMetadata> = {}
     for (const modelId of modelIds) {
-      const metadataResponse = await fetch(`/models/${modelId}.json`)
+      const metadataResponse = await fetch(`models/${modelId}.json`)
       metadata[modelId] = await metadataResponse.json()
     }
 
@@ -359,7 +359,7 @@ async function fetchModels() {
 // Fetch the model's classes, mappings, and label pairs
 async function fetchCellTypeClasses(modelId: string) {
   // Fetch class names
-  const classesResponse = await fetch(`/models/${modelId}.classes`)
+  const classesResponse = await fetch(`models/${modelId}.classes`)
   if (!classesResponse.ok) {
     throw new Error(`Failed to fetch classes: ${classesResponse.statusText}`)
   }
@@ -373,7 +373,7 @@ async function fetchCellTypeClasses(modelId: string) {
 
   try {
     // Use fetch with appropriate headers to ensure correct binary transfer
-    const mappingsResponse = await fetch(`/models/${modelId}-mappings.bin`, {
+    const mappingsResponse = await fetch(`models/${modelId}-mappings.bin`, {
       headers: {
         Accept: 'application/octet-stream',
       },
@@ -415,7 +415,7 @@ async function fetchCellTypeClasses(modelId: string) {
 
   // Fetch label pairs (ground truth and prediction)
   try {
-    const labelsResponse = await fetch(`/models/${modelId}-labels.bin`, {
+    const labelsResponse = await fetch(`models/${modelId}-labels.bin`, {
       headers: {
         Accept: 'application/octet-stream',
       },
@@ -563,7 +563,7 @@ async function runPipeline() {
   }
 
   // Start the pipeline by sending a message to the file worker
-  const modelURL = `${window.location.protocol}//${window.location.host}/models`
+  const modelURL = `${window.location.href}//models`
   predictWorker.value?.postMessage({
     type: 'startPrediction',
     modelID: selectedDataset.value,
