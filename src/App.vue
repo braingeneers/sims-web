@@ -273,7 +273,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 
 import { openDB } from 'idb'
 
-import SIMSWorker from './sims-worker.ts?worker'
+import SIMSWorker from './worker.ts?worker'
 
 import CellTypeChart from './CellTypeChart.vue'
 import ScatterPlot from './ScatterPlot.vue'
