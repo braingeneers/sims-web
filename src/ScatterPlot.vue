@@ -18,8 +18,6 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
-import colorbrewer from 'colorbrewer'
-
 // Combine option types
 type ECOption = echarts.ComposeOption<
   | ScatterSeriesOption

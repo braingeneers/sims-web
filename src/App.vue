@@ -4,10 +4,34 @@
     <v-navigation-drawer v-model="drawerOpen" :temporary="$vuetify.display.smAndDown" app>
       <v-list>
         <v-list-item>
-          <template v-slot:prepend>
+          <div class="d-flex align-center w-100">
             <v-app-bar-nav-icon @click="toggleDrawer" class="ml-n2"></v-app-bar-nav-icon>
-          </template>
-          <v-list-item-title class="text-h6">Cell Space</v-list-item-title>
+            <v-list-item-title class="text-h6 mr-auto">SIMS Web</v-list-item-title>
+            <v-btn
+              variant="text"
+              icon
+              size="small"
+              class="pa-0"
+              style="min-width: 28px"
+              href="https://www.cell.com/cell-genomics/abstract/S2666-979X(24)00165-4"
+              target="_blank"
+              aria-label="Cell Genomics Paper"
+            >
+              <v-icon>mdi-newspaper</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              class="pa-0"
+              style="min-width: 28px"
+              href="https://github.com/braingeneers/sims-web"
+              target="_blank"
+              aria-label="GitHub Repository"
+            >
+              <v-icon>mdi-github</v-icon>
+            </v-btn>
+          </div>
         </v-list-item>
       </v-list>
 
@@ -201,7 +225,7 @@
               :mappings="predictedCoords"
               :label-pairs="predictedLabelPairs"
               :class-names="resultsDB.cellTypeNames"
-              :theme-name="theme.global.name.value"
+              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
             />
           </v-card-text>
         </v-card>
@@ -220,7 +244,7 @@
               :mappings="modelMappings"
               :label-pairs="modelLabelPairs"
               :class-names="cellTypeClasses"
-              :theme-name="theme.global.name.value"
+              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
             />
           </v-card-text>
         </v-card>
@@ -386,7 +410,7 @@ async function fetchCellTypeClasses(modelId: string) {
       console.log(`Loaded ${mappings.length} 2D coordinates from mappings.bin`)
     }
   } catch (error) {
-    console.warn(`Error fetching mappings: ${error.message}`)
+    console.warn(`Error fetching mappings: ${error}`)
   }
 
   // Fetch label pairs (ground truth and prediction)
@@ -427,7 +451,7 @@ async function fetchCellTypeClasses(modelId: string) {
       console.log(`Loaded ${labelPairs.length} label pairs from labels.bin`)
     }
   } catch (error) {
-    console.warn(`Error fetching label pairs: ${error.message}`)
+    console.warn(`Error fetching label pairs: ${error}`)
   }
 
   return {

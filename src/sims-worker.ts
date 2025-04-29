@@ -48,7 +48,6 @@ import h5wasm from 'h5wasm'
 import { InferenceSession, Tensor, env } from 'onnxruntime-web'
 
 import { openDB } from 'idb'
-import { map } from 'd3'
 
 // Define TypeScript interfaces for the worker's data structures
 interface ModelInfo {
@@ -516,7 +515,6 @@ async function predict(
 
       // Now parse the mappings which should have computed while the above loop was running
       const mappings = await mappingPromise
-      console.log(`Mapping output: ${mappings.output.dims} ${mappings.output.data.length}`)
 
       // Reshape into an array of 2D for the plotting packages
       for (let i = 0; i < mappings.output.dims[0]; i++) {
