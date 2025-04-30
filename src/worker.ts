@@ -407,7 +407,6 @@ async function predict(
     }
 
     const labels: [number[], Float32Array][] = []
-    const encodings: Float32Array[] = []
     const coordinates: number[][] = []
 
     const inflationIndices = precomputeInflationIndices(model.genes, sampleGenes)
@@ -499,12 +498,6 @@ async function predict(
           new Float32Array(output.probs.data.slice(batchSlot * 3, batchSlot * 3 + 3)),
         ])
 
-        // Each encoding row is shaped by your model: e.g. 16 dims
-        const encSize = output.encoding.dims[1]
-        const encSliceStart = batchSlot * encSize
-        const encSliceEnd = encSliceStart + encSize
-        encodings.push(new Float32Array(output.encoding.data.slice(encSliceStart, encSliceEnd)))
-
         // Add attention into the predicted class accumulator
         for (let i = 0; i < model.genes.length; i++) {
           const classIndex = labels[labels.length - 1][0][0]
@@ -590,7 +583,6 @@ async function predict(
       cellNames,
       predictions: labels.map((label) => label[0]),
       probabilities: labels.map((label) => label[1]),
-      encodings: encodings.flat(),
       coords: coordinates.flat(),
     })
     await tx.done
