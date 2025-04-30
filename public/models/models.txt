@@ -1,3 +1,2 @@
 allen-celltypes+human-cortex+various-cortical-areas
-default
 pre-postnatal-cortex+all+rna
