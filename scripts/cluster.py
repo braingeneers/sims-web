@@ -26,6 +26,10 @@ app = typer.Typer(help="Single cell expression data encoder and clustering")
 def predict(
     onnx_model_path: Path = typer.Argument(..., help="Path to model .onnx file"),
     sample_path: Path = typer.Argument(..., help="Path to sample.h5ad file"),
+    cell_type_field: Optional[str] = typer.Option(
+        "subclass_label",
+        help="AnnData obs field containing cell type labels (default: subclass_label)",
+    ),
     batch_size: int = typer.Option(
         32, help="Number of samples to process in each batch"
     ),
@@ -39,6 +43,7 @@ def predict(
     Args:
         onnx_model_path: Path to an model .onnx file
         sample_path: Path to a sample.h5ad file containing gene expression data
+        cell_type_field: AnnData obs field containing cell type labels (default: subclass_label)
         batch_size: Number of samples to process at a time
         num_samples: Limit the total number of inputs processed, process all if None
     """
@@ -88,10 +93,10 @@ def predict(
     encodings = []
     ground_truth_labels = []
 
-    # Check if the "subclass_label" exists in adata.obs
-    if "subclass_label" not in adata.obs:
+    # Check if the cell_type_field exists in adata.obs
+    if cell_type_field not in adata.obs:
         typer.echo(
-            "Warning: 'subclass_label' not found in adata.obs. Using -1 as ground truth labels."
+            f"Warning: '{cell_type_field}' not found in adata.obs. Using -1 as ground truth labels."
         )
         has_ground_truth = False
     else:
@@ -138,7 +143,7 @@ def predict(
 
             # Extract ground truth class labels
             if has_ground_truth:
-                batch_labels = adata.obs["subclass_label"].values[batch_start:batch_end]
+                batch_labels = adata.obs[cell_type_field].values[batch_start:batch_end]
                 # Convert class names to indices
                 batch_label_indices = np.array(
                     [class_to_idx.get(label, -1) for label in batch_labels],

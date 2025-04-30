@@ -12,8 +12,12 @@
       "console": "integratedTerminal",
       "args": [
         "predict",
-        "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas.onnx",
-        "${workspaceFolder}/checkpoints/allen-celltypes+human-cortex+various-cortical-areas.h5ad",
+        // "${workspaceFolder}/public/models/allen-celltypes+human-cortex+various-cortical-areas.onnx",
+        // "${workspaceFolder}/checkpoints/allen-celltypes+human-cortex+various-cortical-areas.h5ad",
+        "${workspaceFolder}/public/models/pre-postnatal-cortex+all+rna.onnx",
+        "${workspaceFolder}/checkpoints/pre-postnatal-cortex+all+rna.h5ad",
+        "--cell-type-field",
+        "Cell_Type",
         "--num-samples",
         "1000"
       ]
