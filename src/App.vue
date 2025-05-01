@@ -547,7 +547,7 @@ async function runPipeline() {
   }
 
   // Start the pipeline by sending a message to the file worker
-  const modelURL = `${window.location.href}//models`
+  const modelURL = `${window.location.href}models`
   predictWorker.value?.postMessage({
     type: 'startPrediction',
     modelID: selectedDataset.value,
