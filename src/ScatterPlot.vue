@@ -280,7 +280,7 @@ function updateChart() {
       const className = props.classNames[index]
       if (dataByClass[className]) {
         s.data = dataByClass[className]
-        s.itemStyle.opacity = datasetVisibility.value === 'both' ? 0.15 : 0.8
+        s.itemStyle.opacity = datasetVisibility.value === 'both' ? 0.8 : 0.8 // Set train data to always be 0.8
         s.z = 1
       }
     })
@@ -317,7 +317,7 @@ function updateChart() {
           s.data = dataByClass[className]
         }
         s.symbolSize = 5
-        s.itemStyle.opacity = 0.8
+        s.itemStyle.opacity = 0.15 // Set test data to lower opacity
         s.z = 2
       }
     })

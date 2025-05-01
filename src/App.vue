@@ -177,6 +177,29 @@
           </v-card-text>
         </v-card>
 
+        <!-- Unified Scatter Plot Card - showing both model ground truth and predictions -->
+        <v-card
+          v-if="(resultsDB && predictedCoords) || (modelMappings && cellTypeClasses.length > 0)"
+          class="mb-4"
+          data-cy="unified-scatter-plot-card"
+        >
+          <v-card-title class="text-subtitle-1">Cell Type Visualization</v-card-title>
+          <v-card-subtitle>
+            2D projection of reference model data (train) and predictions (test)
+          </v-card-subtitle>
+          <v-card-text>
+            <scatter-plot
+              :train-mappings="modelMappings || []"
+              :train-label-pairs="modelLabelPairs || []"
+              :test-mappings="predictedCoords || []"
+              :test-label-pairs="predictedLabelPairs || []"
+              :class-names="resultsDB ? resultsDB.cellTypeNames : cellTypeClasses"
+              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
+              ref="scatterPlotRef"
+            />
+          </v-card-text>
+        </v-card>
+
         <!-- Show chart if processing OR if final results exist -->
         <cell-type-chart
           v-if="isProcessing || resultsDB"
@@ -210,30 +233,6 @@
             </v-sheet>
           </v-card-text>
         </v-card>
-
-        <!-- Unified Scatter Plot Card - showing both model ground truth and predictions -->
-        <v-card
-          v-if="(resultsDB && predictedCoords) || (modelMappings && cellTypeClasses.length > 0)"
-          class="mb-4"
-          data-cy="unified-scatter-plot-card"
-        >
-          <v-card-title class="text-subtitle-1">Cell Type Visualization</v-card-title>
-          <v-card-subtitle>
-            2D projection of reference model data (train) and predictions (test)
-          </v-card-subtitle>
-          <v-card-text>
-            <scatter-plot
-              :train-mappings="modelMappings || []"
-              :train-label-pairs="modelLabelPairs || []"
-              :test-mappings="predictedCoords || []"
-              :test-label-pairs="predictedLabelPairs || []"
-              :class-names="resultsDB ? resultsDB.cellTypeNames : cellTypeClasses"
-              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
-              ref="scatterPlotRef"
-            />
-          </v-card-text>
-        </v-card>
-
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
@@ -594,7 +593,6 @@ function handlePredictWorkerMessage(event: MessageEvent) {
       const key: string = index.toString()
       labelCounts.value[key] = (labelCounts.value[key] ?? 0) + 1
     })
-
   } else if (type === 'finishedPrediction') {
     // Add processing result to analysis results
     analysisResults.value.push({
