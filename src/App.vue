@@ -587,7 +587,7 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     processingProgress.value = (countFinished / totalToProcess) * 100
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'predictionOutput') {
-    const { topKIndices, coords } = event.data
+    const { topKIndices } = event.data
     // More idiomatic TypeScript approach
     topKIndices.cpuData.forEach((index: number) => {
       const key: string = index.toString()

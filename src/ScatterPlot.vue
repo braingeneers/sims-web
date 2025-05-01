@@ -115,16 +115,16 @@ const trainDataExtents = computed(() => {
   )
 })
 
-// Replace existing legendData computed property
-const legendData = computed(() => {
-  return props.classNames.map((name, index) => ({
-    name,
-    itemStyle: {
-      color: customColors[index % customColors.length],
-      opacity: 0.8, // Keep legend colors consistent and clear
-    },
-  }))
-})
+// // Replace existing legendData computed property
+// const legendData = computed(() => {
+//   return props.classNames.map((name, index) => ({
+//     name,
+//     itemStyle: {
+//       color: customColors[index % customColors.length],
+//       opacity: 0.8, // Keep legend colors consistent and clear
+//     },
+//   }))
+// })
 
 // Internal data storage for incremental updates
 const trainData = ref<number[][]>([])

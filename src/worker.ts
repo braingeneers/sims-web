@@ -513,7 +513,7 @@ async function predict(
       self.postMessage({
         type: 'predictionOutput',
         topKIndices: output.topk_indices,
-        coords: coordinates.slice(coordinates.length - mappings.output.dims[0]),
+        // coords: coordinates.slice(coordinates.length - mappings.output.dims[0]),
       })
 
       self.postMessage({
@@ -522,7 +522,6 @@ async function predict(
         countFinished: nextStart,
         totalToProcess: cellNames.length,
       })
-
 
       // Swap buffers
       activeBuffer = nextBuffer
