@@ -14,9 +14,13 @@ train:
 		public/models/pre-postnatal-cortex+all+rna-encodings.npy
 
 map:
+	python scripts/cluster.py map \
+		checkpoints/allen-celltypes+human-cortex+various-cortical-areas-pumap.onnx \
+		public/models/allen-celltypes+human-cortex+various-cortical-areas-encodings.npy
+
 	# python scripts/cluster.py map \
 	# 	public/models/allen-celltypes+human-cortex+various-cortical-areas-pumap.onnx \
 	# 	public/models/allen-celltypes+human-cortex+various-cortical-areas-encodings.npy
-	python scripts/cluster.py map \
-		public/models/pre-postnatal-cortex+all+rna-pumap.onnx \
-		public/models/pre-postnatal-cortex+all+rna-encodings.npy
+	# python scripts/cluster.py map \
+	# 	public/models/pre-postnatal-cortex+all+rna-pumap.onnx \
+	# 	public/models/pre-postnatal-cortex+all+rna-encodings.npy
