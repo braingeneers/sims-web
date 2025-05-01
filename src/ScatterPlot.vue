@@ -305,7 +305,6 @@ function updateChart() {
       })
     })
   }
-
   // Chart options
   const option: ECOption = {
     color: customColors,
@@ -390,7 +389,7 @@ function updateChart() {
   }
 
   // Apply options to chart
-  chartInstance.value.setOption(option, true)
+  chartInstance.value?.setOption(option, true)
 }
 
 // Class visibility methods
@@ -471,9 +470,7 @@ onMounted(() => {
       })
       resizeObserver.observe(chartContainer.value)
 
-      if (chartInstance.value) {
-        chartInstance.value.on('legendselectchanged', handleLegendSelect)
-      }
+      chartInstance.value?.on('legendselectchanged', handleLegendSelect)
     }
   })
 })

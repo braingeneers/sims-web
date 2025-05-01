@@ -481,11 +481,6 @@ async function predict(
       // Wait for inference to complete on the current buffer
       const output = await inferencePromise
 
-      self.postMessage({
-        type: 'predictionOutput',
-        topKIndices: output.topk_indices,
-      })
-
       // While we're unpacking the inference kick off 2d mapping in the background
       const mappingPromise = model.mappingSession.run({
         input: output.encoding,
@@ -515,13 +510,19 @@ async function predict(
         coordinates.push([mappings.output.data[startIndex], mappings.output.data[startIndex + 1]])
       }
 
-      // Post progress update
+      self.postMessage({
+        type: 'predictionOutput',
+        topKIndices: output.topk_indices,
+        coords: coordinates.slice(coordinates.length - mappings.output.dims[0]),
+      })
+
       self.postMessage({
         type: 'processingProgress',
         message: `Predicting ${cellNames.length} out of ${totalNumCells}...`,
         countFinished: nextStart,
         totalToProcess: cellNames.length,
       })
+
 
       // Swap buffers
       activeBuffer = nextBuffer
