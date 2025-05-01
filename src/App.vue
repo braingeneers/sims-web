@@ -40,7 +40,7 @@
       <v-list density="compact" nav>
         <!-- File Selector -->
         <v-list-item>
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-dna</v-icon>
           </template>
           <v-list-item-title>Select File</v-list-item-title>
@@ -66,7 +66,7 @@
 
         <!-- Background Dataset and Model Selector -->
         <v-list-item>
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-label-multiple</v-icon>
           </template>
           <v-select
@@ -85,7 +85,7 @@
 
         <!-- Run Button -->
         <v-list-item @click="runPipeline" :disabled="isProcessing" data-cy="run-button">
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon color="primary">mdi-play</v-icon>
           </template>
           <v-list-item-title>Run</v-list-item-title>
@@ -93,7 +93,7 @@
 
         <!-- Stop Button -->
         <v-list-item @click="handleStop" :disabled="!isProcessing">
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon color="error">mdi-stop</v-icon>
           </template>
           <v-list-item-title>Stop</v-list-item-title>
@@ -103,7 +103,7 @@
 
         <!-- Theme Toggle -->
         <v-list-item @click="toggleTheme">
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-theme-light-dark</v-icon>
           </template>
           <v-list-item-title>Toggle Theme</v-list-item-title>
@@ -210,41 +210,26 @@
             </v-sheet>
           </v-card-text>
         </v-card>
-        <!-- Prediction Visualization Scatter Plot -->
+
+        <!-- Unified Scatter Plot Card - showing both model ground truth and predictions -->
         <v-card
-          v-if="resultsDB && predictedCoords && predictedLabelPairs"
+          v-if="(resultsDB && predictedCoords) || (modelMappings && cellTypeClasses.length > 0)"
           class="mb-4"
-          data-cy="prediction-scatter-plot-card"
+          data-cy="unified-scatter-plot-card"
         >
-          <v-card-title class="text-subtitle-1">Prediction Visualization</v-card-title>
+          <v-card-title class="text-subtitle-1">Cell Type Visualization</v-card-title>
           <v-card-subtitle>
-            2D projection of input cells colored by predicted type
+            2D projection of reference model data (train) and predictions (test)
           </v-card-subtitle>
           <v-card-text>
             <scatter-plot
-              :mappings="predictedCoords"
-              :label-pairs="predictedLabelPairs"
-              :class-names="resultsDB.cellTypeNames"
+              :train-mappings="modelMappings || []"
+              :train-label-pairs="modelLabelPairs || []"
+              :test-mappings="predictedCoords || []"
+              :test-label-pairs="predictedLabelPairs || []"
+              :class-names="resultsDB ? resultsDB.cellTypeNames : cellTypeClasses"
               :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
-            />
-          </v-card-text>
-        </v-card>
-
-        <!-- Model Ground Truth Scatter Plot -->
-        <!-- Show this plot if model data is loaded, regardless of processing or resultsDB -->
-        <v-card
-          v-if="modelMappings && modelLabelPairs && cellTypeClasses.length > 0"
-          class="mb-4"
-          data-cy="model-scatter-plot-card"
-        >
-          <v-card-title class="text-subtitle-1">Model Ground Truth Visualization</v-card-title>
-          <v-card-subtitle>Reference distribution for {{ selectedDataset }}</v-card-subtitle>
-          <v-card-text>
-            <scatter-plot
-              :mappings="modelMappings"
-              :label-pairs="modelLabelPairs"
-              :class-names="cellTypeClasses"
-              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
+              ref="scatterPlotRef"
             />
           </v-card-text>
         </v-card>
