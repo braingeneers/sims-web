@@ -240,10 +240,23 @@ function updateChart() {
     }
   }
 
-  // Prepare series based on visibility setting
-  const series: any[] = []
+  // Create empty series for all classes first
+  const series: any[] = props.classNames.map((className, classIndex) => ({
+    name: className,
+    type: 'scatter',
+    symbolSize: 4,
+    data: [], // Start with empty data
+    emphasis: {
+      focus: 'series',
+      scale: 1.5,
+    },
+    itemStyle: {
+      color: customColors[classIndex % customColors.length],
+      opacity: 0.8,
+    },
+  }))
 
-  // Add training data series if visible
+  // Add training data if visible
   if (
     (datasetVisibility.value === 'train' || datasetVisibility.value === 'both') &&
     trainData.value.length > 0
@@ -252,36 +265,28 @@ function updateChart() {
     const dataByClass = trainData.value.reduce(
       (acc, point) => {
         const classIndex = point[2] as number
-        const className = props.classNames[classIndex]
-        if (!acc[className]) acc[className] = []
-        acc[className].push([...point]) // Keep the class index for coloring
+        if (classIndex >= 0 && classIndex < props.classNames.length) {
+          const className = props.classNames[classIndex]
+          if (!acc[className]) acc[className] = []
+          acc[className].push([...point])
+        }
         return acc
       },
       {} as Record<string, number[][]>,
     )
 
-    // Create a series for each existing class
-    props.classNames.forEach((className, classIndex) => {
-      const points = dataByClass[className] || []
-      series.push({
-        name: className,
-        type: 'scatter',
-        symbolSize: 4,
-        data: points,
-        emphasis: {
-          focus: 'series',
-          scale: 1.5,
-        },
-        itemStyle: {
-          color: customColors[classIndex % customColors.length],
-          opacity: datasetVisibility.value === 'both' ? 0.15 : 0.8,
-        },
-        z: 1,
-      })
+    // Update existing series with training data
+    series.forEach((s, index) => {
+      const className = props.classNames[index]
+      if (dataByClass[className]) {
+        s.data = dataByClass[className]
+        s.itemStyle.opacity = datasetVisibility.value === 'both' ? 0.15 : 0.8
+        s.z = 1
+      }
     })
   }
 
-  // Add test data series if visible
+  // Add test data if visible
   if (
     (datasetVisibility.value === 'test' || datasetVisibility.value === 'both') &&
     testData.value.length > 0
@@ -290,36 +295,34 @@ function updateChart() {
     const dataByClass = testData.value.reduce(
       (acc, point) => {
         const classIndex = point[2] as number
-        const className = props.classNames[classIndex]
-        if (!acc[className]) acc[className] = []
-        acc[className].push([...point]) // Keep the class index for coloring
+        if (classIndex >= 0 && classIndex < props.classNames.length) {
+          const className = props.classNames[classIndex]
+          if (!acc[className]) acc[className] = []
+          acc[className].push([...point])
+        }
         return acc
       },
       {} as Record<string, number[][]>,
     )
 
-    // Create a series for each existing class
-    props.classNames.forEach((className, classIndex) => {
-      const points = dataByClass[className] || []
-      series.push({
-        name: className,
-        type: 'scatter',
-        symbolSize: 5,
-        data: points,
-        emphasis: {
-          focus: 'series',
-          scale: 1.5,
-        },
-        itemStyle: {
-          color: customColors[classIndex % customColors.length],
-          opacity: 0.8,
-        },
-        z: 2,
-      })
+    // Update or add test data to series
+    series.forEach((s, index) => {
+      const className = props.classNames[index]
+      if (dataByClass[className]) {
+        if (datasetVisibility.value === 'both') {
+          // Add test data to existing series
+          s.data = [...s.data, ...dataByClass[className]]
+        } else {
+          // Replace with test data
+          s.data = dataByClass[className]
+        }
+        s.symbolSize = 5
+        s.itemStyle.opacity = 0.8
+        s.z = 2
+      }
     })
   }
 
-  // Chart options
   const option: ECOption = {
     color: customColors,
     tooltip: {
@@ -343,8 +346,6 @@ function updateChart() {
           pixelRatio: 2, // Higher quality for retina displays
         },
       },
-      // right: 10,
-      // top: 10
     },
     grid: {
       left: '3%',
@@ -366,12 +367,15 @@ function updateChart() {
         width: 100,
       },
       selected: Object.fromEntries(
-        props.classNames.map((_, index) => [
-          props.classNames[index],
-          !hiddenClassIndices.value.has(index),
-        ]),
+        props.classNames.map((name, index) => [name, !hiddenClassIndices.value.has(index)]),
       ),
-      data: legendData.value,
+      data: props.classNames.map((name, index) => ({
+        name,
+        itemStyle: {
+          color: customColors[index % customColors.length],
+          opacity: 0.8,
+        },
+      })),
     },
     xAxis: {
       type: 'value',
@@ -404,18 +408,7 @@ function updateChart() {
         disabled: !trainDataExtents.value,
       },
     ],
-    series: series.map((s) => ({
-      ...s,
-      itemStyle: {
-        ...s.itemStyle,
-        color: (params: any) => {
-          const classIndex = params.value[2]
-          const baseColor = customColors[classIndex % customColors.length]
-          return baseColor
-        },
-        opacity: datasetVisibility.value === 'both' && s.z === 1 ? 0.15 : 0.8,
-      },
-    })),
+    series,
   }
 
   // Apply options to chart
