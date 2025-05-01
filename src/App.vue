@@ -158,12 +158,12 @@
       <v-container fluid>
         <!-- Start with a welcome message when no analysis has been run -->
         <v-card v-if="!analysisResults.length && !resultsDB" class="mb-4">
-          <v-card-title>Welcome to Cell Space</v-card-title>
+          <v-card-title>Welcome to SIMS Web</v-card-title>
           <v-card-text>
             <p>Use the side menu to select a file and run an analysis.</p>
             <p class="text-caption">
-              A sample file has been automatically loaded. Click the Run button in the sidebar to
-              process it.
+              A sample file has been automatically loaded. Just click the Run button in the sidebar
+              to process it, or select an h5ad file from your computer.
             </p>
           </v-card-text>
         </v-card>
