@@ -115,6 +115,17 @@ const trainDataExtents = computed(() => {
   )
 })
 
+// Replace existing legendData computed property
+const legendData = computed(() => {
+  return props.classNames.map((name, index) => ({
+    name,
+    itemStyle: {
+      color: customColors[index % customColors.length],
+      opacity: 0.8, // Keep legend colors consistent and clear
+    },
+  }))
+})
+
 // Internal data storage for incremental updates
 const trainData = ref<number[][]>([])
 const testData = ref<number[][]>([])
@@ -241,27 +252,28 @@ function updateChart() {
     const dataByClass = trainData.value.reduce(
       (acc, point) => {
         const classIndex = point[2] as number
-        if (!acc[classIndex]) acc[classIndex] = []
-        acc[classIndex].push([point[0], point[1]])
+        const className = props.classNames[classIndex]
+        if (!acc[className]) acc[className] = []
+        acc[className].push([...point]) // Keep the class index for coloring
         return acc
       },
-      {} as Record<number, number[][]>,
+      {} as Record<string, number[][]>,
     )
 
-    // Create a series for each class
-    Object.entries(dataByClass).forEach(([classIndex, points]) => {
-      const seriesName = props.classNames[parseInt(classIndex)] // Use class name instead of index
+    // Create a series for each existing class
+    props.classNames.forEach((className, classIndex) => {
+      const points = dataByClass[className] || []
       series.push({
-        name: seriesName, // Use actual class name as series name
+        name: className,
         type: 'scatter',
         symbolSize: 4,
-        data: points.map((point) => [...point, parseInt(classIndex)]), // Keep class index for coloring
+        data: points,
         emphasis: {
           focus: 'series',
           scale: 1.5,
         },
         itemStyle: {
-          color: customColors[parseInt(classIndex) % customColors.length],
+          color: customColors[classIndex % customColors.length],
           opacity: datasetVisibility.value === 'both' ? 0.15 : 0.8,
         },
         z: 1,
@@ -278,33 +290,35 @@ function updateChart() {
     const dataByClass = testData.value.reduce(
       (acc, point) => {
         const classIndex = point[2] as number
-        if (!acc[classIndex]) acc[classIndex] = []
-        acc[classIndex].push([point[0], point[1]])
+        const className = props.classNames[classIndex]
+        if (!acc[className]) acc[className] = []
+        acc[className].push([...point]) // Keep the class index for coloring
         return acc
       },
-      {} as Record<number, number[][]>,
+      {} as Record<string, number[][]>,
     )
 
-    // Create a series for each class - using same naming as training data
-    Object.entries(dataByClass).forEach(([classIndex, points]) => {
-      const seriesName = props.classNames[parseInt(classIndex)] // Use class name instead of index
+    // Create a series for each existing class
+    props.classNames.forEach((className, classIndex) => {
+      const points = dataByClass[className] || []
       series.push({
-        name: seriesName, // Use actual class name as series name
+        name: className,
         type: 'scatter',
         symbolSize: 5,
-        data: points.map((point) => [...point, parseInt(classIndex)]), // Keep class index for coloring
+        data: points,
         emphasis: {
           focus: 'series',
           scale: 1.5,
         },
         itemStyle: {
-          color: customColors[parseInt(classIndex) % customColors.length],
+          color: customColors[classIndex % customColors.length],
           opacity: 0.8,
         },
         z: 2,
       })
     })
   }
+
   // Chart options
   const option: ECOption = {
     color: customColors,
@@ -321,11 +335,22 @@ function updateChart() {
         return `${dataset}<br/>Class: ${className}<br/>Coords: (${coords[0].toFixed(2)}, ${coords[1].toFixed(2)})`
       },
     },
+    toolbox: {
+      feature: {
+        saveAsImage: {
+          type: 'png',
+          title: 'Save as Image',
+          pixelRatio: 2, // Higher quality for retina displays
+        },
+      },
+      // right: 10,
+      // top: 10
+    },
     grid: {
       left: '3%',
-      right: '20%', // Increased to make room for legend
+      right: '20%',
       bottom: '3%',
-      top: '3%',
+      top: '40px', // Increased to make room for toolbox
       containLabel: false,
     },
     legend: {
@@ -341,9 +366,12 @@ function updateChart() {
         width: 100,
       },
       selected: Object.fromEntries(
-        props.classNames.map((name, index) => [name, !hiddenClassIndices.value.has(index)]),
+        props.classNames.map((_, index) => [
+          props.classNames[index],
+          !hiddenClassIndices.value.has(index),
+        ]),
       ),
-      data: props.classNames,
+      data: legendData.value,
     },
     xAxis: {
       type: 'value',
@@ -382,8 +410,10 @@ function updateChart() {
         ...s.itemStyle,
         color: (params: any) => {
           const classIndex = params.value[2]
-          return customColors[classIndex % customColors.length]
+          const baseColor = customColors[classIndex % customColors.length]
+          return baseColor
         },
+        opacity: datasetVisibility.value === 'both' && s.z === 1 ? 0.15 : 0.8,
       },
     })),
   }
