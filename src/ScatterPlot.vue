@@ -249,11 +249,11 @@ function updateChart() {
     (datasetVisibility.value === 'train' || datasetVisibility.value === 'both') &&
     trainData.value.length > 0
   ) {
-    const trainSeriesData = series.map((s, index) => ({
+    const trainSeriesData = series.map((_s, index) => ({
       name: `${props.classNames[index]} (train)`,
       type: 'scatter',
       symbolSize: 1,
-      data: [],
+      data: [] as number[][], // Explicitly define the type of data
       emphasis: {
         focus: 'series',
         scale: 1.5,
@@ -295,11 +295,11 @@ function updateChart() {
     (datasetVisibility.value === 'test' || datasetVisibility.value === 'both') &&
     testData.value.length > 0
   ) {
-    const testSeriesData = series.map((s, index) => ({
+    const testSeriesData = series.map((_s, index) => ({
       name: `${props.classNames[index]} (test)`,
       type: 'scatter',
       symbolSize: 5,
-      data: [],
+      data: [] as number[][], // Explicitly define the type of data
       emphasis: {
         focus: 'series',
         scale: 1.5,
