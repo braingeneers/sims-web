@@ -115,17 +115,6 @@ const trainDataExtents = computed(() => {
   )
 })
 
-// // Replace existing legendData computed property
-// const legendData = computed(() => {
-//   return props.classNames.map((name, index) => ({
-//     name,
-//     itemStyle: {
-//       color: customColors[index % customColors.length],
-//       opacity: 0.8, // Keep legend colors consistent and clear
-//     },
-//   }))
-// })
-
 // Internal data storage for incremental updates
 const trainData = ref<number[][]>([])
 const testData = ref<number[][]>([])
@@ -244,7 +233,7 @@ function updateChart() {
   const series: any[] = props.classNames.map((className, classIndex) => ({
     name: className,
     type: 'scatter',
-    symbolSize: 4,
+    symbolSize: 1,
     data: [], // Start with empty data
     emphasis: {
       focus: 'series',
@@ -252,7 +241,6 @@ function updateChart() {
     },
     itemStyle: {
       color: customColors[classIndex % customColors.length],
-      opacity: 0.8,
     },
   }))
 
@@ -261,6 +249,22 @@ function updateChart() {
     (datasetVisibility.value === 'train' || datasetVisibility.value === 'both') &&
     trainData.value.length > 0
   ) {
+    const trainSeriesData = series.map((s, index) => ({
+      name: `${props.classNames[index]} (train)`,
+      type: 'scatter',
+      symbolSize: 1,
+      data: [],
+      emphasis: {
+        focus: 'series',
+        scale: 1.5,
+      },
+      itemStyle: {
+        color: customColors[index % customColors.length],
+        opacity: 0.5, // Lower opacity for training data
+      },
+      z: 1,
+    }))
+
     // Group training data by class
     const dataByClass = trainData.value.reduce(
       (acc, point) => {
@@ -275,15 +279,15 @@ function updateChart() {
       {} as Record<string, number[][]>,
     )
 
-    // Update existing series with training data
-    series.forEach((s, index) => {
+    // Update train series with data
+    trainSeriesData.forEach((s, index) => {
       const className = props.classNames[index]
       if (dataByClass[className]) {
         s.data = dataByClass[className]
-        s.itemStyle.opacity = datasetVisibility.value === 'both' ? 0.8 : 0.8 // Set train data to always be 0.8
-        s.z = 1
       }
     })
+
+    series.push(...trainSeriesData)
   }
 
   // Add test data if visible
@@ -291,6 +295,22 @@ function updateChart() {
     (datasetVisibility.value === 'test' || datasetVisibility.value === 'both') &&
     testData.value.length > 0
   ) {
+    const testSeriesData = series.map((s, index) => ({
+      name: `${props.classNames[index]} (test)`,
+      type: 'scatter',
+      symbolSize: 5,
+      data: [],
+      emphasis: {
+        focus: 'series',
+        scale: 1.5,
+      },
+      itemStyle: {
+        color: customColors[index % customColors.length],
+        opacity: 1.0, // Full opacity for test data
+      },
+      z: 2,
+    }))
+
     // Group test data by class
     const dataByClass = testData.value.reduce(
       (acc, point) => {
@@ -305,22 +325,15 @@ function updateChart() {
       {} as Record<string, number[][]>,
     )
 
-    // Update or add test data to series
-    series.forEach((s, index) => {
+    // Update test series with data
+    testSeriesData.forEach((s, index) => {
       const className = props.classNames[index]
       if (dataByClass[className]) {
-        if (datasetVisibility.value === 'both') {
-          // Add test data to existing series
-          s.data = [...s.data, ...dataByClass[className]]
-        } else {
-          // Replace with test data
-          s.data = dataByClass[className]
-        }
-        s.symbolSize = 5
-        s.itemStyle.opacity = 0.15 // Set test data to lower opacity
-        s.z = 2
+        s.data = dataByClass[className]
       }
     })
+
+    series.push(...testSeriesData)
   }
 
   const option: ECOption = {
@@ -373,7 +386,7 @@ function updateChart() {
         name,
         itemStyle: {
           color: customColors[index % customColors.length],
-          opacity: 0.8,
+          opacity: 1.0,
         },
       })),
     },
