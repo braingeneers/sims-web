@@ -305,6 +305,9 @@ def map(
     sample_encodings_path: Path = typer.Argument(
         ..., help="Path to sample-encodings.npy file"
     ),
+    labels_path: Path = typer.Argument(
+        ..., help="Path to the labels.bin file (ground_truth, prediction pairs)"
+    ),
     batch_size: int = typer.Option(
         32, help="Number of samples to process in each batch"
     ),
@@ -313,35 +316,52 @@ def map(
     ),
 ) -> None:
     """
-    Map the encodings to 2d coordinates using the mapper onnx model.
+    Map the encodings to 2d coordinates using the mapper onnx model, combine with
+    predicted class labels, and save in an optimized Apache ECharts format:
+    Float32Array of [x1, y1, classIndex1, x2, y2, classIndex2, ...].
 
     Args:
         model_path: Path to pumap.onnx
         sample_encodings_path: Path to sample-encodings.npy file
+        labels_path: Path to the labels.bin file containing (ground_truth, prediction) pairs.
         batch_size: Number of samples to process at a time
         num_samples: Limit the total number of inputs processed, process all if None
     """
-    typer.echo(f"Mapping samples from {sample_encodings_path} using model {model_path}")
+    typer.echo(
+        f"Mapping samples from {sample_encodings_path} using model {model_path} and labels {labels_path}"
+    )
 
     # Load the cluster model
     onnx_session = ort.InferenceSession(str(model_path))
     input_name = onnx_session.get_inputs()[0].name
     output_name = onnx_session.get_outputs()[0].name
 
-    input_shape = onnx_session.get_inputs()[0].shape
-    output_shape = onnx_session.get_outputs()[0].shape
-
     # Load the encodings
     encodings = np.load(sample_encodings_path)
+
+    # Load the labels (ground_truth, prediction pairs)
+    # The file contains flattened int32 pairs: [gt1, pred1, gt2, pred2, ...]
+    label_pairs = np.fromfile(labels_path, dtype=np.int32)
+    # Reshape to (n_samples, 2) and extract the predicted labels (second column)
+    predicted_labels = label_pairs.reshape(-1, 2)[:, 1]
 
     # Determine number of samples to process
     num_encodings = num_samples if num_samples is not None else encodings.shape[0]
     if num_samples is not None:
         num_encodings = min(encodings.shape[0], num_samples)
 
+    # Ensure the number of labels matches the number of encodings to process
+    if predicted_labels.shape[0] < num_encodings:
+        raise ValueError(
+            f"Number of labels ({predicted_labels.shape[0]}) is less than the number of encodings to process ({num_encodings})."
+        )
+    # Slice labels if needed
+    if predicted_labels.shape[0] > num_encodings:
+        predicted_labels = predicted_labels[:num_encodings]
+
     typer.echo(f"Processing {num_encodings} encodings with batch size {batch_size}")
 
-    # Initialize numpy array to store mappings
+    # Initialize list to store mappings
     all_mappings = []
 
     # Process in batches
@@ -363,22 +383,29 @@ def map(
             pbar.update(batch_size_actual)
 
     # Combine all batches
-    mappings = np.concatenate(all_mappings)
+    mappings = np.concatenate(all_mappings)  # Shape: (num_encodings, 2)
 
-    # Save the mappings
-    output_path = Path(sample_encodings_path).with_name(
-        f"{Path(sample_encodings_path).stem.replace('-encodings', '')}-mappings.npy"
-    )
-    np.save(output_path, mappings)
+    # Combine mappings (x, y) with predicted labels
+    # Reshape labels to (num_encodings, 1) and cast to float32
+    predicted_labels_float = predicted_labels.reshape(-1, 1).astype(np.float32)
+    # Concatenate along the second axis to get [x, y, classIndex]
+    combined_data = np.concatenate(
+        (mappings, predicted_labels_float), axis=1
+    )  # Shape: (num_encodings, 3)
 
-    # Flatten the array to [x1, y1, x2, y2, ...]
-    flat_mappings = mappings.flatten()
-    output_path = Path(sample_encodings_path).with_name(
+    # Flatten the array to [x1, y1, classIndex1, x2, y2, classIndex2, ...]
+    flat_combined_data = combined_data.flatten()
+
+    # Define the output path based on the encodings file name
+    output_filename = (
         f"{Path(sample_encodings_path).stem.replace('-encodings', '')}-mappings.bin"
     )
-    flat_mappings.tofile(output_path)
+    output_path = Path(sample_encodings_path).with_name(output_filename)
 
-    typer.echo(f"Saved mappings to {output_path}")
+    # Save the flattened data as a binary file
+    flat_combined_data.tofile(output_path)
+
+    typer.echo(f"Saved optimized ECharts data [x, y, classIndex] to {output_path}")
 
 
 if __name__ == "__main__":

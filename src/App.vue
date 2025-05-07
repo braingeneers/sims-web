@@ -178,7 +178,7 @@
         </v-card>
 
         <!-- Unified Scatter Plot Card - showing both model ground truth and predictions -->
-        <v-card
+        <!-- <v-card
           v-if="(resultsDB && predictedCoords) || (modelMappings && cellTypeClasses.length > 0)"
           class="mb-4"
           data-cy="unified-scatter-plot-card"
@@ -196,6 +196,23 @@
               :class-names="resultsDB ? resultsDB.cellTypeNames : cellTypeClasses"
               :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
               ref="scatterPlotRef"
+            />
+          </v-card-text>
+        </v-card> -->
+
+        <!-- WebGL Scatter Plot Card - showing only model ground truth (train) -->
+        <v-card
+          v-if="trainMappings && cellTypeClasses.length > 0"
+          class="mb-4"
+          data-cy="webgl-scatter-plot-card"
+        >
+          <v-card-title class="text-subtitle-1">Reference Model Visualization (WebGL)</v-card-title>
+          <v-card-subtitle> 2D projection of reference model data (train) </v-card-subtitle>
+          <v-card-text>
+            <scatter-plot-web-g-l
+              :mappings="trainMappings || []"
+              :class-names="cellTypeClasses"
+              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
             />
           </v-card-text>
         </v-card>
@@ -253,14 +270,15 @@
 
 <script setup lang="ts">
 import { useTheme } from 'vuetify'
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 
 import { openDB } from 'idb'
 
 import SIMSWorker from './worker.ts?worker'
 
 import CellTypeChart from './CellTypeChart.vue'
-import ScatterPlot from './ScatterPlot.vue'
+// import ScatterPlot from './ScatterPlot.vue'
+import ScatterPlotWebGL from './ScatterPlotWebGL.vue'
 import PredictionsTable from './PredictionsTable.vue'
 
 // Drawer state
@@ -312,8 +330,9 @@ const modelMetadata = ref<Record<string, ModelMetadata>>({})
 
 // Add this new ref to store cell type classes
 const cellTypeClasses = ref<string[]>([])
-const modelMappings = ref<number[][] | null>(null)
-const modelLabelPairs = ref<number[][] | null>(null)
+const trainMappings = ref<Float32Array | null>(null)
+
+// Add this new ref
 
 // Fetch models and their metadata
 async function fetchModels() {
@@ -351,9 +370,8 @@ async function fetchCellTypeClasses(modelId: string) {
   const classes = classesText.trim().split('\n')
   cellTypeClasses.value = classes
 
-  // Fetch 2D mappings (coordinates for visualization)
-  let mappings = null
-  let labelPairs = null
+  // Create and assign mappings variable directly
+  // const mappings = ref<Float32Array>(new Float32Array())
 
   try {
     // Use fetch with appropriate headers to ensure correct binary transfer
@@ -370,78 +388,18 @@ async function fetchCellTypeClasses(modelId: string) {
       // Check buffer size to verify we got complete data
       console.log(`Received mappings buffer of ${mappingsBuffer.byteLength} bytes`)
 
-      // Create a properly sized Float32Array view of the buffer
-      // Each pair is 2 float32 values (8 bytes total per pair)
-      const expectedPairs = Math.floor(mappingsBuffer.byteLength / 8)
-      console.log(`Expected number of coordinate pairs: ${expectedPairs}`)
+      // Assign directly to the reference
+      trainMappings.value = new Float32Array(mappingsBuffer)
 
-      const mappingsData = new Float32Array(mappingsBuffer)
-
-      // Verify the array length
-      console.log(`Float32Array length: ${mappingsData.length}, expected: ${expectedPairs * 2}`)
-
-      // Convert flat array to array of [x, y] pairs
-      mappings = []
-      for (let i = 0; i < mappingsData.length; i += 2) {
-        if (i + 1 < mappingsData.length) {
-          // Ensure we don't go out of bounds
-          mappings.push([mappingsData[i], mappingsData[i + 1]])
-        }
-      }
-
-      modelMappings.value = mappings
-
-      console.log(`Loaded ${mappings.length} 2D coordinates from mappings.bin`)
+      console.log(`Loaded ${trainMappings.value.length / 3} points from mappings.bin`)
     }
   } catch (error) {
     console.warn(`Error fetching mappings: ${error}`)
   }
 
-  // Fetch label pairs (ground truth and prediction)
-  try {
-    const labelsResponse = await fetch(`models/${modelId}-labels.bin`, {
-      headers: {
-        Accept: 'application/octet-stream',
-      },
-    })
-
-    if (labelsResponse.ok) {
-      const labelsBuffer = await labelsResponse.arrayBuffer()
-
-      // Check buffer size
-      console.log(`Received labels buffer of ${labelsBuffer.byteLength} bytes`)
-
-      // Each pair is 2 int32 values (8 bytes total per pair)
-      const expectedPairs = Math.floor(labelsBuffer.byteLength / 8)
-      console.log(`Expected number of label pairs: ${expectedPairs}`)
-
-      // Create a view of the buffer as Int32Array
-      const labelsData = new Int32Array(labelsBuffer)
-
-      // Verify the array length
-      console.log(`Int32Array length: ${labelsData.length}, expected: ${expectedPairs * 2}`)
-
-      // Convert flat array to array of [groundTruth, prediction] pairs
-      labelPairs = []
-      for (let i = 0; i < labelsData.length; i += 2) {
-        if (i + 1 < labelsData.length) {
-          // Ensure we don't go out of bounds
-          labelPairs.push([labelsData[i], labelsData[i + 1]])
-        }
-      }
-
-      modelLabelPairs.value = labelPairs
-
-      console.log(`Loaded ${labelPairs.length} label pairs from labels.bin`)
-    }
-  } catch (error) {
-    console.warn(`Error fetching label pairs: ${error}`)
-  }
-
   return {
     classes, // Array of class names
-    mappings, // Array of [x, y] coordinates for each cell
-    labelPairs, // Array of [groundTruth, prediction] class indices for each cell
+    trainMappings, // Float32Array with [x, y, classIndex] values
   }
 }
 
@@ -651,35 +609,72 @@ watch(selectedDataset, (newModelId) => {
   }
 })
 
-// +++ START: Computed properties for prediction plot data +++
-const predictedCoords = computed<number[][] | null>(() => {
-  if (!resultsDB.value?.coords) return null
-  const coords: number[][] = []
-  // The coords array is flat [x1, y1, x2, y2, ...], convert to [[x1, y1], [x2, y2], ...]
-  for (let i = 0; i < resultsDB.value.coords.length; i += 2) {
-    if (i + 1 < resultsDB.value.coords.length) {
-      coords.push([resultsDB.value.coords[i], resultsDB.value.coords[i + 1]])
-    }
-  }
-  // Ensure the number of coordinates matches the number of cells/predictions
-  if (resultsDB.value.predictions && coords.length !== resultsDB.value.predictions.length) {
-    console.warn(
-      'Prediction Scatter Plot: Mismatch between number of coordinates and predictions.',
-      `Coords length: ${coords.length}, Predictions length: ${resultsDB.value.predictions.length}`,
-    )
-    // Return only coordinates that have a corresponding prediction
-    return coords.slice(0, resultsDB.value.predictions.length)
-  }
-  return coords
-})
+// // +++ START: Computed properties for prediction plot data +++
+// const predictedCoords = computed<number[][] | null>(() => {
+//   if (!resultsDB.value?.coords) return null
+//   const coords: number[][] = []
+//   // The coords array is flat [x1, y1, x2, y2, ...], convert to [[x1, y1], [x2, y2], ...]
+//   for (let i = 0; i < resultsDB.value.coords.length; i += 2) {
+//     if (i + 1 < resultsDB.value.coords.length) {
+//       coords.push([resultsDB.value.coords[i], resultsDB.value.coords[i + 1]])
+//     }
+//   }
+//   // Ensure the number of coordinates matches the number of cells/predictions
+//   if (resultsDB.value.predictions && coords.length !== resultsDB.value.predictions.length) {
+//     console.warn(
+//       'Prediction Scatter Plot: Mismatch between number of coordinates and predictions.',
+//       `Coords length: ${coords.length}, Predictions length: ${resultsDB.value.predictions.length}`,
+//     )
+//     // Return only coordinates that have a corresponding prediction
+//     return coords.slice(0, resultsDB.value.predictions.length)
+//   }
+//   return coords
+// })
 
-const predictedLabelPairs = computed<number[][] | null>(() => {
-  if (!resultsDB.value?.predictions) return null
-  // ScatterPlot uses the first element of the pair for coloring via visualMap dimension 2
-  // We want to color by the top prediction (index 0 in the predictions array for each cell)
-  // The second element is not used for coloring in the current ScatterPlot setup.
-  return resultsDB.value.predictions.map((predictionArray) => [predictionArray[0], -1]) // Use top prediction index
-})
+// const predictedLabelPairs = computed<number[][] | null>(() => {
+//   if (!resultsDB.value?.predictions) return null
+//   // ScatterPlot uses the first element of the pair for coloring via visualMap dimension 2
+//   // We want to color by the top prediction (index 0 in the predictions array for each cell)
+//   // The second element is not used for coloring in the current ScatterPlot setup.
+//   return resultsDB.value.predictions.map((predictionArray) => [predictionArray[0], -1]) // Use top prediction index
+// })
+
+// const predictedFloatData = computed<Float32Array | null>(() => {
+//   if (!resultsDB.value?.coords || !resultsDB.value?.predictions) return null
+
+//   // Create a Float32Array with structure [x, y, classIndex, x, y, classIndex, ...]
+//   const coords = resultsDB.value.coords
+//   const predictions = resultsDB.value.predictions
+
+//   // Ensure we have matching data
+//   if (coords.length / 2 !== predictions.length) {
+//     console.warn('Mismatch between coords and predictions length')
+//     return null
+//   }
+
+//   const pointCount = predictions.length
+//   const data = new Float32Array(pointCount * 3)
+
+//   for (let i = 0; i < pointCount; i++) {
+//     data[i * 3] = coords[i * 2] // x coordinate
+//     data[i * 3 + 1] = coords[i * 2 + 1] // y coordinate
+//     data[i * 3 + 2] = predictions[i][0] // top prediction class index
+//   }
+
+//   return data
+// })
+
+watch(
+  () => trainMappings.value,
+  (newMappings) => {
+    if (newMappings && newMappings.length > 0) {
+      // The mappings loaded from the file are already in Float32Array format
+      trainMappings.value = newMappings
+      console.log(`Model data loaded with ${newMappings.length / 3} points`)
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   loadDataset()
