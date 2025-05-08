@@ -189,44 +189,12 @@
             <scatter-plot-web-g-l
               :train-mappings="trainMappings || []"
               :class-names="cellTypeClasses"
+              :test-mappings="testMappings"
               :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
             />
           </v-card-text>
         </v-card>
 
-        <!-- Show chart if processing OR if final results exist -->
-        <cell-type-chart
-          v-if="isProcessing || resultsDB"
-          :is-processing="isProcessing"
-          :dynamic-counts="labelCounts"
-          :final-results="resultsDB"
-          :model-cell-type-names="cellTypeClasses"
-        />
-
-        <!-- Optionally show model classes list if NOT processing and NO results yet -->
-        <v-card v-else-if="cellTypeClasses.length > 0" class="mb-4">
-          <v-card-title class="d-flex align-center">
-            <div>Available Model Classes</div>
-            <v-spacer></v-spacer>
-            <v-chip class="ml-2" size="small">{{ cellTypeClasses.length }}</v-chip>
-          </v-card-title>
-          <v-card-text>
-            <v-sheet class="cell-type-classes" elevation="0">
-              <v-chip-group>
-                <v-chip
-                  v-for="(className, index) in cellTypeClasses"
-                  :key="index"
-                  :color="index % 2 === 0 ? 'primary' : 'secondary'"
-                  variant="outlined"
-                  size="small"
-                  class="ma-1"
-                >
-                  {{ className }}
-                </v-chip>
-              </v-chip-group>
-            </v-sheet>
-          </v-card-text>
-        </v-card>
         <!-- Predictions Table -->
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
@@ -253,9 +221,9 @@ import { openDB } from 'idb'
 
 import SIMSWorker from './worker.ts?worker'
 
-import CellTypeChart from './CellTypeChart.vue'
 import ScatterPlotWebGL from './ScatterPlotWebGL.vue'
 import PredictionsTable from './PredictionsTable.vue'
+import test from 'node:test'
 
 // Drawer state
 const drawerOpen = ref(true)
@@ -307,6 +275,7 @@ const modelMetadata = ref<Record<string, ModelMetadata>>({})
 // Add this new ref to store cell type classes
 const cellTypeClasses = ref<string[]>([])
 const trainMappings = ref<Float32Array | null>(null)
+const testMappings = ref<Float32Array | null>(null)
 
 // Add this new ref
 
@@ -426,6 +395,20 @@ async function loadDataset() {
     const keys = await db.getAllKeys('datasets')
     if (keys.length > 0) {
       resultsDB.value = await db.get('datasets', keys[0])
+
+      // Load the existing predictions and mappings into a format the scatter plot needs
+      if (resultsDB.value) {
+        testMappings.value = new Float32Array(resultsDB.value.predictions.length * 3)
+
+        for (let i = 0; i < resultsDB.value.predictions.length; i++) {
+          testMappings.value[i * 3] = resultsDB.value.coords[i * 2]
+          testMappings.value[i * 3 + 1] = resultsDB.value.coords[i * 2 + 1]
+          testMappings.value[i * 3 + 2] = Number(resultsDB.value.predictions[i][0])
+        }
+      } else {
+        console.error('Existing predictions not found in database')
+        testMappings.value = new Float32Array(0) // Clear test mappings if not found
+      }
     } else {
       resultsDB.value = null // Clear if no data found
     }
@@ -467,6 +450,7 @@ async function runPipeline() {
   // Clear previous results from database and UI
   await clearResults()
   analysisResults.value = []
+  testMappings.value = new Float32Array(0)
 
   labelCounts.value = {}
 
@@ -499,6 +483,7 @@ function handleStop() {
   isProcessing.value = false
 
   clearResults()
+  testMappings.value = new Float32Array(0) // Clear test mappings on stop
 }
 
 function handleFileSelected(files: File | File[]) {
@@ -522,11 +507,20 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'predictionOutput') {
     const { topKIndices, coords } = event.data
-    // More idiomatic TypeScript approach
-    topKIndices.cpuData.forEach((index: number) => {
-      const key: string = index.toString()
-      labelCounts.value[key] = (labelCounts.value[key] ?? 0) + 1
-    })
+
+    const newMappings = new Float32Array(coords.length * 3)
+
+    for (let i = 0; i < coords.length; i++) {
+      newMappings[i * 3] = coords[i][0]
+      newMappings[i * 3 + 1] = coords[i][1]
+      newMappings[i * 3 + 2] = Number(topKIndices.cpuData[i * 3])
+    }
+
+    const currentTestMappings = testMappings.value ? testMappings.value : new Float32Array(0)
+    const combined = new Float32Array(currentTestMappings.length + newMappings.length)
+    combined.set(currentTestMappings)
+    combined.set(newMappings, currentTestMappings.length)
+    testMappings.value = combined
   } else if (type === 'finishedPrediction') {
     // Add processing result to analysis results
     analysisResults.value.push({
@@ -591,6 +585,18 @@ watch(
     if (newMappings && newMappings.length > 0) {
       // The mappings loaded from the file are already in Float32Array format
       trainMappings.value = newMappings
+      console.log(`Model data loaded with ${newMappings.length / 3} points`)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => testMappings.value,
+  (newMappings) => {
+    if (newMappings && newMappings.length > 0) {
+      // The mappings loaded from the file are already in Float32Array format
+      testMappings.value = newMappings
       console.log(`Model data loaded with ${newMappings.length / 3} points`)
     }
   },

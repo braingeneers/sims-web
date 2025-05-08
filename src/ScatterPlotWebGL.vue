@@ -3,7 +3,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { defineComponent, onMounted, onUnmounted, ref, watch, PropType } from 'vue'
 import * as echarts from 'echarts/core'
 import { ScatterGLChart } from 'echarts-gl/charts'
 
@@ -21,6 +21,12 @@ export default defineComponent({
       type: Float32Array,
       required: true,
     },
+    // Expecting a Float32Array with [x,y,label index] format
+    testMappings: {
+      type: Float32Array,
+      required: false,
+      default: null,
+    },
     classNames: {
       type: Array,
       required: true,
@@ -35,12 +41,6 @@ export default defineComponent({
     const chartContainer = ref<HTMLElement | null>(null)
     let chart: echarts.ECharts | null = null
 
-    // Extract unique classIndex values
-    const classIndices = new Set<number>()
-    for (let i = 2; i < props.trainMappings.length; i += 3) {
-      classIndices.add(props.trainMappings[i])
-    }
-
     const pieces = props.classNames.map((name, index) => {
       const hue = (index * 137.5) % 360 // Consistent color generation
       return {
@@ -51,7 +51,7 @@ export default defineComponent({
     })
 
     // ECharts configuration
-    const option: echarts.EChartsCoreOption = {
+    const option = {
       xAxis: {
         show: false,
       },
@@ -72,11 +72,21 @@ export default defineComponent({
       },
       series: [
         {
+          name: 'Reference',
           type: 'scatterGL', // WebGL renderer
           data: props.trainMappings, // Use props.trainMappings instead of data
           dimensions: ['x', 'y', 'class'],
           symbolSize: 1,
-          progressive: 0.1, // Incremental rendering
+          itemStyle: {
+            opacity: 0.07,
+          },
+        },
+        {
+          name: 'Predictions',
+          type: 'scatterGL', // WebGL renderer
+          data: props.testMappings,
+          dimensions: ['x', 'y', 'class'],
+          symbolSize: 5,
         },
       ],
     }
@@ -98,6 +108,23 @@ export default defineComponent({
     onMounted(() => {
       initChart()
     })
+
+    watch(
+      () => [props.trainMappings, props.testMappings, props.classNames],
+      () => {
+        if (chart) {
+          const updatedOption = {
+            series: [{
+              data: props.trainMappings
+            }, {
+              data: props.testMappings
+            }]
+          }
+          chart.setOption(updatedOption, { notMerge: false })
+        }
+      },
+      { deep: true }, // Use deep watch if props themselves might mutate, though Float32Array replacement is fine
+    )
 
     // Watch for theme changes and re-initialize chart when it changes
     watch(
