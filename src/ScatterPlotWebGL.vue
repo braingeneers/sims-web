@@ -1,5 +1,27 @@
 <template>
-  <div ref="chartContainer" style="width: 100%; height: 400px"></div>
+  <div>
+    <div class="controls">
+      <button 
+        :class="{ active: showBoth }" 
+        @click="setVisibility('both')"
+      >
+        Both
+      </button>
+      <button 
+        :class="{ active: showTrainOnly }" 
+        @click="setVisibility('train')"
+      >
+        Training
+      </button>
+      <button 
+        :class="{ active: showTestOnly }" 
+        @click="setVisibility('test')"
+      >
+        Test
+      </button>
+    </div>
+    <div ref="chartContainer" style="width: 100%; height: 400px"></div>
+  </div>
 </template>
 
 <script lang="ts">
@@ -40,6 +62,9 @@ export default defineComponent({
   setup(props) {
     const chartContainer = ref<HTMLElement | null>(null)
     let chart: echarts.ECharts | null = null
+    const showBoth = ref(true)
+    const showTrainOnly = ref(false)
+    const showTestOnly = ref(false)
 
     const pieces = props.classNames.map((name, index) => {
       const hue = (index * 137.5) % 360 // Consistent color generation
@@ -91,6 +116,33 @@ export default defineComponent({
       ],
     }
 
+    const updateSeriesVisibility = () => {
+      if (!chart) return
+
+      const updatedOption = {
+        series: [{
+          name: 'Reference',
+          data: showBoth.value || showTrainOnly.value ? props.trainMappings : [],
+          symbolSize: 1,
+          itemStyle: {
+            opacity: 0.07,
+          },
+        }, {
+          name: 'Predictions',
+          data: showBoth.value || showTestOnly.value ? props.testMappings : [],
+          symbolSize: 5,
+        }]
+      }
+      chart.setOption(updatedOption, { notMerge: false })
+    }
+
+    const setVisibility = (mode: 'both' | 'train' | 'test') => {
+      showBoth.value = mode === 'both'
+      showTrainOnly.value = mode === 'train'
+      showTestOnly.value = mode === 'test'
+      updateSeriesVisibility()
+    }
+
     // Function to initialize or reinitialize the chart
     const initChart = () => {
       if (!chartContainer.value) return
@@ -111,18 +163,7 @@ export default defineComponent({
 
     watch(
       () => [props.trainMappings, props.testMappings, props.classNames],
-      () => {
-        if (chart) {
-          const updatedOption = {
-            series: [{
-              data: props.trainMappings
-            }, {
-              data: props.testMappings
-            }]
-          }
-          chart.setOption(updatedOption, { notMerge: false })
-        }
-      },
+      updateSeriesVisibility,
       { deep: true }, // Use deep watch if props themselves might mutate, though Float32Array replacement is fine
     )
 
@@ -143,6 +184,10 @@ export default defineComponent({
 
     return {
       chartContainer,
+      showBoth,
+      showTrainOnly,
+      showTestOnly,
+      setVisibility,
     }
   },
 })
@@ -153,5 +198,33 @@ export default defineComponent({
 div {
   width: 100%;
   height: 100%;
+}
+
+.controls {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+
+button.active {
+  background: #4CAF50;
+  color: white;
+  border-color: #45a049;
+}
+
+button:hover {
+  background: #f0f0f0;
+}
+
+button.active:hover {
+  background: #45a049;
 }
 </style>
