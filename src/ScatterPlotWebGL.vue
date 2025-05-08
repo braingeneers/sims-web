@@ -1,26 +1,11 @@
 <template>
-  <div>
+  <div class="chart-container">
     <div class="controls">
-      <button 
-        :class="{ active: showBoth }" 
-        @click="setVisibility('both')"
-      >
-        Both
-      </button>
-      <button 
-        :class="{ active: showTrainOnly }" 
-        @click="setVisibility('train')"
-      >
-        Training
-      </button>
-      <button 
-        :class="{ active: showTestOnly }" 
-        @click="setVisibility('test')"
-      >
-        Test
-      </button>
+      <button :class="{ active: showBoth }" @click="setVisibility('both')">Both</button>
+      <button :class="{ active: showTrainOnly }" @click="setVisibility('train')">Training</button>
+      <button :class="{ active: showTestOnly }" @click="setVisibility('test')">Test</button>
     </div>
-    <div ref="chartContainer" style="width: 100%; height: 400px"></div>
+    <div ref="chartContainer" style="width: 100%; height: 600px"></div>
   </div>
 </template>
 
@@ -86,14 +71,19 @@ export default defineComponent({
       visualMap: {
         type: 'piecewise',
         dimension: 2,
-        pieces: pieces, // Use named pieces
+        pieces: pieces,
         outOfRange: {
           symbolSize: 0,
         },
         show: true,
-        orient: 'vertical', // Optional styling
-        left: 10,
-        top: 'center',
+        orient: 'vertical',
+        left: 10,  // Change from right to left
+        top: 70,   // Position below the buttons
+        itemWidth: 15,
+        itemHeight: 15,
+        textStyle: {
+          fontSize: 12,
+        },
       },
       series: [
         {
@@ -103,7 +93,7 @@ export default defineComponent({
           dimensions: ['x', 'y', 'class'],
           symbolSize: 1,
           itemStyle: {
-            opacity: 0.07,
+            opacity: 0.1,
           },
         },
         {
@@ -120,18 +110,21 @@ export default defineComponent({
       if (!chart) return
 
       const updatedOption = {
-        series: [{
-          name: 'Reference',
-          data: showBoth.value || showTrainOnly.value ? props.trainMappings : [],
-          symbolSize: 1,
-          itemStyle: {
-            opacity: 0.07,
+        series: [
+          {
+            name: 'Reference',
+            data: showBoth.value || showTrainOnly.value ? props.trainMappings : [],
+            symbolSize: 1,
+            itemStyle: {
+              opacity: 0.07,
+            },
           },
-        }, {
-          name: 'Predictions',
-          data: showBoth.value || showTestOnly.value ? props.testMappings : [],
-          symbolSize: 5,
-        }]
+          {
+            name: 'Predictions',
+            data: showBoth.value || showTestOnly.value ? props.testMappings : [],
+            symbolSize: 5,
+          },
+        ],
       }
       chart.setOption(updatedOption, { notMerge: false })
     }
@@ -194,14 +187,17 @@ export default defineComponent({
 </script>
 
 <style scoped>
-/* Ensure the chart container takes full width and height */
-div {
+.chart-container {
+  position: relative;
   width: 100%;
   height: 100%;
 }
 
 .controls {
-  margin-bottom: 1rem;
+  position: absolute;
+  top: 10px;
+  left: 10px; /* Change from right to left */
+  z-index: 1;
   display: flex;
   gap: 0.5rem;
 }
@@ -212,10 +208,11 @@ button {
   border-radius: 4px;
   background: white;
   cursor: pointer;
+  font-size: 12px;
 }
 
 button.active {
-  background: #4CAF50;
+  background: #4caf50;
   color: white;
   border-color: #45a049;
 }

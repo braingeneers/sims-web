@@ -183,16 +183,12 @@
           class="mb-4"
           data-cy="webgl-scatter-plot-card"
         >
-          <v-card-title class="text-subtitle-1">Reference Model Visualization (WebGL)</v-card-title>
-          <v-card-subtitle> 2D projection of reference model data (train) </v-card-subtitle>
-          <v-card-text>
-            <scatter-plot-web-g-l
-              :train-mappings="trainMappings || []"
-              :class-names="cellTypeClasses"
-              :test-mappings="testMappings"
-              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
-            />
-          </v-card-text>
+          <scatter-plot-web-g-l
+            :train-mappings="trainMappings || []"
+            :class-names="cellTypeClasses"
+            :test-mappings="testMappings"
+            :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
+          />
         </v-card>
 
         <!-- Predictions Table -->
