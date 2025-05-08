@@ -177,30 +177,7 @@
           </v-card-text>
         </v-card>
 
-        <!-- Unified Scatter Plot Card - showing both model ground truth and predictions -->
-        <!-- <v-card
-          v-if="(resultsDB && predictedCoords) || (modelMappings && cellTypeClasses.length > 0)"
-          class="mb-4"
-          data-cy="unified-scatter-plot-card"
-        >
-          <v-card-title class="text-subtitle-1">Cell Type Visualization</v-card-title>
-          <v-card-subtitle>
-            2D projection of reference model data (train) and predictions (test)
-          </v-card-subtitle>
-          <v-card-text>
-            <scatter-plot
-              :train-mappings="modelMappings || []"
-              :train-label-pairs="modelLabelPairs || []"
-              :test-mappings="predictedCoords || []"
-              :test-label-pairs="predictedLabelPairs || []"
-              :class-names="resultsDB ? resultsDB.cellTypeNames : cellTypeClasses"
-              :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
-              ref="scatterPlotRef"
-            />
-          </v-card-text>
-        </v-card> -->
-
-        <!-- WebGL Scatter Plot Card - showing only model ground truth (train) -->
+        <!-- WebGL Scatter Plot Card -->
         <v-card
           v-if="trainMappings && cellTypeClasses.length > 0"
           class="mb-4"
@@ -210,7 +187,7 @@
           <v-card-subtitle> 2D projection of reference model data (train) </v-card-subtitle>
           <v-card-text>
             <scatter-plot-web-g-l
-              :mappings="trainMappings || []"
+              :train-mappings="trainMappings || []"
               :class-names="cellTypeClasses"
               :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
             />
@@ -277,7 +254,6 @@ import { openDB } from 'idb'
 import SIMSWorker from './worker.ts?worker'
 
 import CellTypeChart from './CellTypeChart.vue'
-// import ScatterPlot from './ScatterPlot.vue'
 import ScatterPlotWebGL from './ScatterPlotWebGL.vue'
 import PredictionsTable from './PredictionsTable.vue'
 
@@ -545,7 +521,7 @@ function handlePredictWorkerMessage(event: MessageEvent) {
     processingProgress.value = (countFinished / totalToProcess) * 100
     currentStatus.value = `Processing: ${countFinished} of ${totalToProcess} complete (${Math.round(processingProgress.value)}%)`
   } else if (type === 'predictionOutput') {
-    const { topKIndices } = event.data
+    const { topKIndices, coords } = event.data
     // More idiomatic TypeScript approach
     topKIndices.cpuData.forEach((index: number) => {
       const key: string = index.toString()
@@ -608,61 +584,6 @@ watch(selectedDataset, (newModelId) => {
     fetchCellTypeClasses(newModelId)
   }
 })
-
-// // +++ START: Computed properties for prediction plot data +++
-// const predictedCoords = computed<number[][] | null>(() => {
-//   if (!resultsDB.value?.coords) return null
-//   const coords: number[][] = []
-//   // The coords array is flat [x1, y1, x2, y2, ...], convert to [[x1, y1], [x2, y2], ...]
-//   for (let i = 0; i < resultsDB.value.coords.length; i += 2) {
-//     if (i + 1 < resultsDB.value.coords.length) {
-//       coords.push([resultsDB.value.coords[i], resultsDB.value.coords[i + 1]])
-//     }
-//   }
-//   // Ensure the number of coordinates matches the number of cells/predictions
-//   if (resultsDB.value.predictions && coords.length !== resultsDB.value.predictions.length) {
-//     console.warn(
-//       'Prediction Scatter Plot: Mismatch between number of coordinates and predictions.',
-//       `Coords length: ${coords.length}, Predictions length: ${resultsDB.value.predictions.length}`,
-//     )
-//     // Return only coordinates that have a corresponding prediction
-//     return coords.slice(0, resultsDB.value.predictions.length)
-//   }
-//   return coords
-// })
-
-// const predictedLabelPairs = computed<number[][] | null>(() => {
-//   if (!resultsDB.value?.predictions) return null
-//   // ScatterPlot uses the first element of the pair for coloring via visualMap dimension 2
-//   // We want to color by the top prediction (index 0 in the predictions array for each cell)
-//   // The second element is not used for coloring in the current ScatterPlot setup.
-//   return resultsDB.value.predictions.map((predictionArray) => [predictionArray[0], -1]) // Use top prediction index
-// })
-
-// const predictedFloatData = computed<Float32Array | null>(() => {
-//   if (!resultsDB.value?.coords || !resultsDB.value?.predictions) return null
-
-//   // Create a Float32Array with structure [x, y, classIndex, x, y, classIndex, ...]
-//   const coords = resultsDB.value.coords
-//   const predictions = resultsDB.value.predictions
-
-//   // Ensure we have matching data
-//   if (coords.length / 2 !== predictions.length) {
-//     console.warn('Mismatch between coords and predictions length')
-//     return null
-//   }
-
-//   const pointCount = predictions.length
-//   const data = new Float32Array(pointCount * 3)
-
-//   for (let i = 0; i < pointCount; i++) {
-//     data[i * 3] = coords[i * 2] // x coordinate
-//     data[i * 3 + 1] = coords[i * 2 + 1] // y coordinate
-//     data[i * 3 + 2] = predictions[i][0] // top prediction class index
-//   }
-
-//   return data
-// })
 
 watch(
   () => trainMappings.value,

@@ -17,7 +17,7 @@ export default defineComponent({
   name: 'ScatterPlotWebGL',
   props: {
     // Expecting a Float32Array with [x,y,label index] format
-    mappings: {
+    trainMappings: {
       type: Float32Array,
       required: true,
     },
@@ -37,8 +37,8 @@ export default defineComponent({
 
     // Extract unique classIndex values
     const classIndices = new Set<number>()
-    for (let i = 2; i < props.mappings.length; i += 3) {
-      classIndices.add(props.mappings[i])
+    for (let i = 2; i < props.trainMappings.length; i += 3) {
+      classIndices.add(props.trainMappings[i])
     }
 
     const pieces = props.classNames.map((name, index) => {
@@ -73,7 +73,7 @@ export default defineComponent({
       series: [
         {
           type: 'scatterGL', // WebGL renderer
-          data: props.mappings, // Use props.mappings instead of data
+          data: props.trainMappings, // Use props.trainMappings instead of data
           dimensions: ['x', 'y', 'class'],
           symbolSize: 1,
           progressive: 0.1, // Incremental rendering
