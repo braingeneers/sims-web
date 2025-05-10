@@ -1,16 +1,26 @@
 <template>
   <div class="chart-container">
-    <div class="controls">
-      <button :class="{ active: showBoth }" @click="setVisibility('both')">Both</button>
-      <button :class="{ active: showTrainOnly }" @click="setVisibility('train')">Training</button>
-      <button :class="{ active: showTestOnly }" @click="setVisibility('test')">Test</button>
+    <div class="controls-header">
+      <div class="legend-controls">
+        <button @click="toggleAllClasses(true)">Show All</button>
+        <button @click="toggleAllClasses(false)">Hide All</button>
+      </div>
+      <div
+        class="visibility-controls"
+        v-if="trainMappings && trainMappings.length > 0 && testMappings && testMappings.length > 0"
+      >
+        <button :class="{ active: showBoth }" @click="setVisibility('both')">Both</button>
+        <button :class="{ active: showTrainOnly }" @click="setVisibility('train')">Training</button>
+        <button :class="{ active: showTestOnly }" @click="setVisibility('test')">Test</button>
+      </div>
     </div>
+
     <div ref="chartContainer" style="width: 100%; height: 600px"></div>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted, ref, watch, PropType } from 'vue'
+import { defineComponent, onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import * as echarts from 'echarts/core'
 import { ScatterGLChart } from 'echarts-gl/charts'
 
@@ -50,128 +60,238 @@ export default defineComponent({
     const showBoth = ref(true)
     const showTrainOnly = ref(false)
     const showTestOnly = ref(false)
+    const hiddenClasses = ref<Set<number>>(new Set())
 
-    const pieces = props.classNames.map((name, index) => {
-      const hue = (index * 137.5) % 360 // Consistent color generation
-      return {
-        value: index, // The class index
-        label: name as string, // The class name
-        color: `hsl(${hue}, 70%, 50%)`,
-      }
+    const pieces = computed(() => {
+      return props.classNames.map((name, index) => {
+        const hue = (index * 137.5) % 360 // Consistent color generation
+        return {
+          value: index, // The class index
+          label: name as string, // The class name
+          color: `hsl(${hue}, 70%, 50%)`,
+        }
+      })
     })
 
-    // ECharts configuration
-    const option = {
-      xAxis: {
-        show: false,
-      },
-      yAxis: {
-        show: false,
-      },
-      visualMap: {
-        type: 'piecewise',
-        dimension: 2,
-        pieces: pieces,
-        outOfRange: {
-          symbolSize: 0,
-        },
-        show: true,
-        orient: 'vertical',
-        left: 10,  // Change from right to left
-        top: 70,   // Position below the buttons
-        itemWidth: 15,
-        itemHeight: 15,
-        textStyle: {
-          fontSize: 12,
-        },
-      },
-      series: [
-        {
-          name: 'Reference',
-          type: 'scatterGL', // WebGL renderer
-          data: props.trainMappings, // Use props.trainMappings instead of data
-          dimensions: ['x', 'y', 'class'],
-          symbolSize: 1,
-          itemStyle: {
-            opacity: 0.1,
-          },
-        },
-        {
-          name: 'Predictions',
-          type: 'scatterGL', // WebGL renderer
-          data: props.testMappings,
-          dimensions: ['x', 'y', 'class'],
-          symbolSize: 5,
-        },
-      ],
+    // Calculate data bounds from training data
+    const calculateBounds = (data: Float32Array) => {
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+
+      for (let i = 0; i < data.length; i += 3) {
+        const x = data[i]
+        const y = data[i + 1]
+
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x)
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y)
+      }
+
+      // Add 5% padding to the bounds
+      const xPadding = (maxX - minX) * 0.05
+      const yPadding = (maxY - minY) * 0.05
+
+      return {
+        xMin: minX - xPadding,
+        xMax: maxX + xPadding,
+        yMin: minY - yPadding,
+        yMax: maxY + yPadding,
+      }
     }
 
-    const updateSeriesVisibility = () => {
-      if (!chart) return
-
-      const updatedOption = {
+    // Function to initialize or reinitialize the chart
+    const getChartOption = () => {
+      const currentBounds = calculateBounds(props.trainMappings)
+      return {
+        xAxis: {
+          show: false,
+          min: currentBounds.xMin,
+          max: currentBounds.xMax,
+        },
+        yAxis: {
+          show: false,
+          min: currentBounds.yMin,
+          max: currentBounds.yMax,
+        },
+        visualMap: {
+          type: 'piecewise',
+          dimension: 2, // Corresponds to the 3rd item in data array [x, y, classIndex]
+          pieces: pieces.value,
+          outOfRange: {
+            symbolSize: 0, // Points not in any piece (or for deselected pieces) will be hidden
+          },
+          show: true,
+          orient: 'vertical',
+          left: 10,
+          top: 70,
+          itemWidth: 15,
+          itemHeight: 15,
+          textStyle: {
+            fontSize: 12,
+          },
+          // `selected` will be controlled by updateChart
+        },
         series: [
           {
             name: 'Reference',
-            data: showBoth.value || showTrainOnly.value ? props.trainMappings : [],
+            type: 'scatterGL',
+            data: [], // Initial data set by updateChart
+            dimensions: ['x', 'y', 'class'],
             symbolSize: 1,
             itemStyle: {
-              opacity: 0.07,
+              opacity: 0.1,
             },
           },
           {
             name: 'Predictions',
-            data: showBoth.value || showTestOnly.value ? props.testMappings : [],
+            type: 'scatterGL',
+            data: [], // Initial data set by updateChart
+            dimensions: ['x', 'y', 'class'],
             symbolSize: 5,
           },
         ],
       }
-      chart.setOption(updatedOption, { notMerge: false })
+    }
+
+    const updateChart = () => {
+      if (!chart) return
+
+      const visualMapSelected = pieces.value.reduce(
+        (acc, piece) => {
+          acc[piece.label] = !hiddenClasses.value.has(piece.value as number)
+          return acc
+        },
+        {} as Record<string, boolean>,
+      )
+
+      let trainDataToShow: Float32Array | any[] = []
+      if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
+        trainDataToShow = props.trainMappings // Pass full data; visualMap will filter
+      }
+
+      let testDataToShow: Float32Array | any[] = []
+      if ((showBoth.value || showTestOnly.value) && props.testMappings) {
+        testDataToShow = props.testMappings // Pass full data; visualMap will filter
+      }
+
+      const currentBounds = calculateBounds(props.trainMappings)
+
+      chart.setOption({
+        xAxis: { min: currentBounds.xMin, max: currentBounds.xMax },
+        yAxis: { min: currentBounds.yMin, max: currentBounds.yMax },
+        visualMap: {
+          selected: visualMapSelected,
+        },
+        series: [
+          { name: 'Reference', data: trainDataToShow },
+          { name: 'Predictions', data: testDataToShow },
+        ],
+      })
+    }
+
+    const initChart = () => {
+      if (!chartContainer.value) return
+      if (chart) {
+        chart.dispose()
+      }
+      chart = echarts.init(chartContainer.value, props.themeName)
+      chart.setOption(getChartOption())
+
+      chart.off('visualmapselected') // Remove previous listener
+      chart.on('visualmapselected', (params: any) => {
+        const newHiddenClasses = new Set<number>()
+        const eventSelectedMap = params.selected // { 'label1': true, 'label2': false }
+
+        pieces.value.forEach((piece) => {
+          if (!eventSelectedMap[piece.label]) {
+            newHiddenClasses.add(piece.value as number)
+          }
+        })
+
+        let changed = newHiddenClasses.size !== hiddenClasses.value.size
+        if (!changed) {
+          for (const item of newHiddenClasses) {
+            if (!hiddenClasses.value.has(item)) {
+              changed = true
+              break
+            }
+          }
+          if (!changed) {
+            for (const item of hiddenClasses.value) {
+              if (!newHiddenClasses.has(item)) {
+                changed = true
+                break
+              }
+            }
+          }
+        }
+
+        if (changed) {
+          hiddenClasses.value = newHiddenClasses
+          updateChart()
+        }
+      })
+      updateChart() // Load initial data
     }
 
     const setVisibility = (mode: 'both' | 'train' | 'test') => {
       showBoth.value = mode === 'both'
       showTrainOnly.value = mode === 'train'
       showTestOnly.value = mode === 'test'
-      updateSeriesVisibility()
+      updateChart()
     }
 
-    // Function to initialize or reinitialize the chart
-    const initChart = () => {
-      if (!chartContainer.value) return
-
-      // Dispose of previous chart instance if it exists
-      if (chart) {
-        chart.dispose()
-      }
-
-      // Create new chart with current theme
-      chart = echarts.init(chartContainer.value, props.themeName)
-      chart.setOption(option)
+    const toggleAllClasses = (show: boolean) => {
+      hiddenClasses.value = show ? new Set() : new Set(pieces.value.map((p) => p.value as number))
+      updateChart()
     }
-
-    onMounted(() => {
-      initChart()
-    })
-
-    watch(
-      () => [props.trainMappings, props.testMappings, props.classNames],
-      updateSeriesVisibility,
-      { deep: true }, // Use deep watch if props themselves might mutate, though Float32Array replacement is fine
-    )
-
-    // Watch for theme changes and re-initialize chart when it changes
-    watch(
-      () => props.themeName,
-      () => {
-        initChart()
-      },
-    )
 
     onUnmounted(() => {
       if (chart) {
         chart.dispose()
         chart = null
+      }
+    })
+
+    watch(
+      () => props.classNames,
+      () => initChart(),
+      { deep: true },
+    )
+    watch(
+      () => props.trainMappings,
+      () => initChart(),
+      { deep: true },
+    )
+    watch(
+      () => props.testMappings,
+      () => updateChart(),
+      { deep: true },
+    )
+    watch(
+      () => props.themeName,
+      () => initChart(),
+    )
+
+    onMounted(() => {
+      // Ensure initial bounds are calculated if trainMappings is already available
+      if (props.trainMappings && props.trainMappings.length > 0) {
+        initChart()
+      } else {
+        // If trainMappings is not yet available, watch for it to initialize
+        const unwatch = watch(
+          () => props.trainMappings,
+          (newVal) => {
+            if (newVal && newVal.length > 0) {
+              initChart()
+              unwatch() // Stop watching once initialized
+            }
+          },
+          { immediate: true, deep: true },
+        )
       }
     })
 
@@ -181,6 +301,7 @@ export default defineComponent({
       showTrainOnly,
       showTestOnly,
       setVisibility,
+      toggleAllClasses,
     }
   },
 })
@@ -193,11 +314,23 @@ export default defineComponent({
   height: 100%;
 }
 
-.controls {
+.controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+}
+
+.visibility-controls {
+  display: flex;
+  gap: 0.5rem;
   position: absolute;
-  top: 10px;
-  left: 10px; /* Change from right to left */
-  z-index: 1;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.legend-controls {
   display: flex;
   gap: 0.5rem;
 }
