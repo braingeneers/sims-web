@@ -161,7 +161,7 @@ export default defineComponent({
 
       const visualMapSelected = pieces.value.reduce(
         (acc, piece) => {
-          acc[piece.label] = !hiddenClasses.value.has(piece.value as number)
+          acc[piece.value as number] = !hiddenClasses.value.has(piece.value as number)
           return acc
         },
         {} as Record<string, boolean>,
