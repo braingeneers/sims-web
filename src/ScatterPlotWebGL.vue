@@ -73,7 +73,7 @@ export default defineComponent({
       })
     })
 
-    // Calculate data bounds from training data
+    // Calculate bounds from training only so extent doesn't shift as test mappings are added
     const calculateBounds = (data: Float32Array) => {
       let minX = Infinity
       let maxX = -Infinity
@@ -126,7 +126,7 @@ export default defineComponent({
           show: true,
           orient: 'vertical',
           left: 10,
-          top: 70,
+          top: 10,
           itemWidth: 15,
           itemHeight: 15,
           textStyle: {
@@ -154,42 +154,6 @@ export default defineComponent({
           },
         ],
       }
-    }
-
-    const updateChart = () => {
-      if (!chart) return
-
-      const visualMapSelected = pieces.value.reduce(
-        (acc, piece) => {
-          acc[piece.value as number] = !hiddenClasses.value.has(piece.value as number)
-          return acc
-        },
-        {} as Record<string, boolean>,
-      )
-
-      let trainDataToShow: Float32Array | any[] = []
-      if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
-        trainDataToShow = props.trainMappings // Pass full data; visualMap will filter
-      }
-
-      let testDataToShow: Float32Array | any[] = []
-      if ((showBoth.value || showTestOnly.value) && props.testMappings) {
-        testDataToShow = props.testMappings // Pass full data; visualMap will filter
-      }
-
-      const currentBounds = calculateBounds(props.trainMappings)
-
-      chart.setOption({
-        xAxis: { min: currentBounds.xMin, max: currentBounds.xMax },
-        yAxis: { min: currentBounds.yMin, max: currentBounds.yMax },
-        visualMap: {
-          selected: visualMapSelected,
-        },
-        series: [
-          { name: 'Reference', data: trainDataToShow },
-          { name: 'Predictions', data: testDataToShow },
-        ],
-      })
     }
 
     const initChart = () => {
@@ -235,6 +199,38 @@ export default defineComponent({
         }
       })
       updateChart() // Load initial data
+    }
+
+    const updateChart = () => {
+      if (!chart) return
+
+      const visualMapSelected = pieces.value.reduce(
+        (acc, piece) => {
+          acc[piece.value as number] = !hiddenClasses.value.has(piece.value as number)
+          return acc
+        },
+        {} as Record<string, boolean>,
+      )
+
+      let trainDataToShow: Float32Array | any[] = []
+      if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
+        trainDataToShow = props.trainMappings // Pass full data; visualMap will filter
+      }
+
+      let testDataToShow: Float32Array | any[] = []
+      if ((showBoth.value || showTestOnly.value) && props.testMappings) {
+        testDataToShow = props.testMappings // Pass full data; visualMap will filter
+      }
+
+      chart.setOption({
+        visualMap: {
+          selected: visualMapSelected,
+        },
+        series: [
+          { name: 'Reference', data: trainDataToShow },
+          { name: 'Predictions', data: testDataToShow },
+        ],
+      })
     }
 
     const setVisibility = (mode: 'both' | 'train' | 'test') => {
