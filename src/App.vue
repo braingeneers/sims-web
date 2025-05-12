@@ -219,7 +219,6 @@ import SIMSWorker from './worker.ts?worker'
 
 import ScatterPlotWebGL from './ScatterPlotWebGL.vue'
 import PredictionsTable from './PredictionsTable.vue'
-import test from 'node:test'
 
 // Drawer state
 const drawerOpen = ref(true)

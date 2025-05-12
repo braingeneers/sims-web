@@ -21,7 +21,8 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, onUnmounted, ref, watch, computed } from 'vue'
-import * as echarts from 'echarts/core'
+import * as echarts from 'echarts'
+// import * as echarts from 'echarts/core'
 import { ScatterGLChart } from 'echarts-gl/charts'
 
 import { GridComponent, VisualMapComponent, LegendComponent } from 'echarts/components'
@@ -171,8 +172,13 @@ export default defineComponent({
     const updateChart = () => {
       if (!chart) return
 
-      // Save currently selected classes so we can preserve when switching both/train/test
-      const currentSelection = chart.getOption().visualMap[0].selected
+      // Add type assertion for the getOption result
+      const options = chart.getOption() as echarts.EChartsOption
+      const visualMap = Array.isArray(options.visualMap) ? options.visualMap[0] : options.visualMap
+
+      // Type assertion for the visualMap to specify it's a PiecewiseVisualMapOption
+      // const currentSelection = (visualMap as echarts.PiecewiseVisualMapOption)?.selected || {}
+      const currentSelection = visualMap?.selected || {}
 
       let trainDataToShow: Float32Array | any[] = []
       if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
@@ -205,9 +211,11 @@ export default defineComponent({
     const toggleAllClasses = (show: boolean) => {
       if (!chart) return
 
-      const currentSelection = chart.getOption().visualMap[0].selected
+      const options = chart.getOption() as echarts.EChartsOption
+      const visualMap = Array.isArray(options.visualMap) ? options.visualMap[0] : options.visualMap
+      const currentSelection = visualMap.selected || {}
 
-      for (let i = 0; i < chart.getOption().visualMap[0].pieces.length; i++) {
+      for (let i = 0; i < visualMap.pieces!.length; i++) {
         currentSelection[i] = show
       }
 
