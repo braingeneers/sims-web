@@ -169,13 +169,13 @@
         </v-card>
 
         <!-- File Information Display -->
-        <!-- <v-card v-if="resultsDB" class="mb-4">
+        <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
           <v-card-text data-cy="results">
             <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
             {{ resultsDB.genes.length }}
           </v-card-text>
-        </v-card> -->
+        </v-card>
 
         <!-- WebGL Scatter Plot Card -->
         <v-card
@@ -192,7 +192,7 @@
         </v-card>
 
         <!-- Predictions Table -->
-        <!-- <v-card v-if="resultsDB" class="mb-4">
+        <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>Predictions</v-card-title>
           <v-card-text>
             <predictions-table
@@ -203,7 +203,7 @@
               :coordinates="resultsDB.coords"
             ></predictions-table>
           </v-card-text>
-        </v-card> -->
+        </v-card>
       </v-container>
     </v-main>
   </v-app>
