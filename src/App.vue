@@ -172,8 +172,16 @@
         <v-card v-if="resultsDB" class="mb-4">
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
           <v-card-text data-cy="results">
-            <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
-            {{ resultsDB.genes.length }}
+            <div>
+              <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
+              {{ resultsDB.genes.length }}
+            </div>
+            <div>
+              <strong>Gene's Driving Predictions: </strong>
+              <text v-for="(gene, index) in resultsDB.overallTopGenes" :key="index">
+                {{ resultsDB.genes[gene] }}&nbsp;
+              </text>
+            </div>
           </v-card-text>
         </v-card>
 
