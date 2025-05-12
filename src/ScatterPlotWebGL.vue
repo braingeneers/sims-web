@@ -30,6 +30,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 // Register necessary components
 echarts.use([ScatterGLChart, GridComponent, VisualMapComponent, LegendComponent, CanvasRenderer])
 
+// Define a Vue component
 export default defineComponent({
   name: 'ScatterPlotWebGL',
   props: {
@@ -60,7 +61,7 @@ export default defineComponent({
     const showBoth = ref(true)
     const showTrainOnly = ref(false)
     const showTestOnly = ref(false)
-    const hiddenClasses = ref<Set<number>>(new Set())
+    // const hiddenClasses = ref<Set<number>>(new Set())
 
     const pieces = computed(() => {
       return props.classNames.map((name, index) => {
@@ -164,53 +165,14 @@ export default defineComponent({
       chart = echarts.init(chartContainer.value, props.themeName)
       chart.setOption(getChartOption())
 
-      chart.off('visualmapselected') // Remove previous listener
-      chart.on('visualmapselected', (params: any) => {
-        const newHiddenClasses = new Set<number>()
-        const eventSelectedMap = params.selected // { 'label1': true, 'label2': false }
-
-        pieces.value.forEach((piece) => {
-          if (!eventSelectedMap[piece.label]) {
-            newHiddenClasses.add(piece.value as number)
-          }
-        })
-
-        let changed = newHiddenClasses.size !== hiddenClasses.value.size
-        if (!changed) {
-          for (const item of newHiddenClasses) {
-            if (!hiddenClasses.value.has(item)) {
-              changed = true
-              break
-            }
-          }
-          if (!changed) {
-            for (const item of hiddenClasses.value) {
-              if (!newHiddenClasses.has(item)) {
-                changed = true
-                break
-              }
-            }
-          }
-        }
-
-        if (changed) {
-          hiddenClasses.value = newHiddenClasses
-          updateChart()
-        }
-      })
       updateChart() // Load initial data
     }
 
     const updateChart = () => {
       if (!chart) return
 
-      const visualMapSelected = pieces.value.reduce(
-        (acc, piece) => {
-          acc[piece.value as number] = !hiddenClasses.value.has(piece.value as number)
-          return acc
-        },
-        {} as Record<string, boolean>,
-      )
+      // Save currently selected classes so we can preserve when switching both/train/test
+      const currentSelection = chart.getOption().visualMap[0].selected
 
       let trainDataToShow: Float32Array | any[] = []
       if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
@@ -224,7 +186,7 @@ export default defineComponent({
 
       chart.setOption({
         visualMap: {
-          selected: visualMapSelected,
+          selected: currentSelection,
         },
         series: [
           { name: 'Reference', data: trainDataToShow },
@@ -241,9 +203,27 @@ export default defineComponent({
     }
 
     const toggleAllClasses = (show: boolean) => {
-      hiddenClasses.value = show ? new Set() : new Set(pieces.value.map((p) => p.value as number))
-      updateChart()
+      if (!chart) return
+
+      const currentSelection = chart.getOption().visualMap[0].selected
+
+      for (let i = 0; i < chart.getOption().visualMap[0].pieces.length; i++) {
+        currentSelection[i] = show
+      }
+
+      chart.setOption({
+        visualMap: {
+          selected: currentSelection,
+        },
+      })
     }
+
+    onMounted(() => {
+      // Ensure initial bounds are calculated if trainMappings is already available
+      if (props.trainMappings && props.trainMappings.length > 0) {
+        initChart()
+      }
+    })
 
     onUnmounted(() => {
       if (chart) {
@@ -272,25 +252,6 @@ export default defineComponent({
       () => initChart(),
     )
 
-    onMounted(() => {
-      // Ensure initial bounds are calculated if trainMappings is already available
-      if (props.trainMappings && props.trainMappings.length > 0) {
-        initChart()
-      } else {
-        // If trainMappings is not yet available, watch for it to initialize
-        const unwatch = watch(
-          () => props.trainMappings,
-          (newVal) => {
-            if (newVal && newVal.length > 0) {
-              initChart()
-              unwatch() // Stop watching once initialized
-            }
-          },
-          { immediate: true, deep: true },
-        )
-      }
-    })
-
     return {
       chartContainer,
       showBoth,
@@ -314,21 +275,24 @@ export default defineComponent({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
+  padding: 16px;
+}
+
+.legend-controls {
+  display: flex;
+  top: 0px;
+  gap: 0.5rem;
+  position: absolute;
 }
 
 .visibility-controls {
   display: flex;
+  top: 0px;
   gap: 0.5rem;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
-}
-
-.legend-controls {
-  display: flex;
-  gap: 0.5rem;
 }
 
 button {
