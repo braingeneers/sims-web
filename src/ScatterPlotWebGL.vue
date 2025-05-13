@@ -115,7 +115,7 @@ export default defineComponent({
 
     const pieces = computed(() => {
       return props.classNames.map((name, index) => {
-        const hue = (index * 137.5) % 360 // Consistent color generation
+        // const hue = (index * 137.5) % 360 // Consistent color generation
         return {
           value: index, // The class index
           label: name as string, // The class name
