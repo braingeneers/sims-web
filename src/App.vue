@@ -160,11 +160,16 @@
         <v-card v-if="!analysisResults.length && !resultsDB" class="mb-4">
           <v-card-title>Welcome to SIMS Web</v-card-title>
           <v-card-text>
-            <p>Use the side menu to select a file and run an analysis.</p>
-            <p class="text-caption">
-              A sample file has been automatically loaded. Just click the Run button in the sidebar
-              to process it, or select an h5ad file from your computer.
+            <p>
+              This is a single page web application that allows you to predict cell types in an
+              .h5ad file and plot their embeddings against a reference dataset. The prediction and
+              mapping all run within your browser so your data never leaves your computer. Just
+              click the Run button in the sidebar to process a sample .h5ad, or select an .h5ad from
+              your computer and appropriate reference datasets. Data is streamed from the .h5ad file
+              through the model and mapping so you see results immediately and the file can be of
+              unlimited size.
             </p>
+            <p></p>
           </v-card-text>
         </v-card>
 
@@ -177,7 +182,7 @@
               {{ resultsDB.genes.length }}
             </div>
             <div>
-              <strong>Gene's Driving Predictions: </strong>
+              <strong>Top 10 Gene's Driving Predictions: </strong>
               <text v-for="(gene, index) in resultsDB.overallTopGenes" :key="index">
                 {{ resultsDB.genes[gene] }}&nbsp;
               </text>

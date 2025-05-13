@@ -1,27 +1,20 @@
 # sims-web
 
-Classify, explain and display single-cell RNA data 100% client side within the browser.
-Opens an h5ad in the browser and runs a selected SIMs model and displays predictions.
+Single page web application that allows you to predict cell types in an
+.h5ad file and plot their embeddings against a reference dataset. The prediction and
+mapping all run within your browser so your data never leaves your computer. Data is streamed from the .h5ad file through the model and mapping so you see results immediately and the file can be of unlimited size.
 
 # [Demo](https://cells-test.gi.ucsc.edu/sims)
 
 This is achieved by running [SIMS](https://github.com/braingeneers/SIMS) in the browser using [h5wasm](https://github.com/usnistgov/h5wasm) to read local AnnData (.h5ad) files and [ONNX](https://onnxruntime.ai/) to run the labeling and parametric UMAP models.
 
-You can view the default ONNX model via [netron](https://netron.app/?url=https://github.com/braingeneers/sims-web/raw/refs/heads/main/public/models/default.onnx)
-
 ![Alt text](screenshot.png?raw=true 'SIMS Web Screenshot')
-
-## Motivation
-
-By running SIMs machine learning forward inference in the browser as well as a parameteric UMAP a bench biologist can quickly and easily determine cell types from an h5ad file from a sequencer quickly and easily with zero software installation.
 
 ## Architecture
 
 Single page Vue web app using Vuetify Material UI and Vite with no back end - just file storage and an HTTP server is required. The python pieces all relate to converting PyTorch models into ONNX and then editing the ONNX graph to move as much of predictions processing into the graph as possible (i.e. LpNorm and SoftMax of probabilities) as well as to expose internal nodes such as the encoder output for clustering and the attention masks for explainability. Incremental h5 file reading and inference via ONNX are all handled in [worker.js](worker.js), a web worker that attempts to utilize all the cores on a machine running multi-threaded inference, double buffered incremental h5 file reading with support for sparse data expansion and gene inflation inline. The 2d mapping runs as the prediction emits encodings.
 
 # Datasets & Models
-
-NOTE: Only Allen Brain has the PUMAP model trained and implemented.
 
 ## Allen Brain : Cell Diversity in the Human Cortex
 
