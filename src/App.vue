@@ -192,9 +192,9 @@
           data-cy="webgl-scatter-plot-card"
         >
           <scatter-plot-web-g-l
-            :train-mappings="trainMappings || []"
+            :train-mappings="trainMappings || undefined"
             :class-names="cellTypeClasses"
-            :test-mappings="testMappings"
+            :test-mappings="testMappings || undefined"
             :theme-name="theme.global.name.value === 'dark' ? 'dark' : 'light'"
           />
         </v-card>

@@ -20,7 +20,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted, ref, watch, computed } from 'vue'
+import { defineComponent, onMounted, onUnmounted, ref, watch, computed, PropType } from 'vue'
 import * as echarts from 'echarts'
 // import * as echarts from 'echarts/core'
 import { ScatterGLChart } from 'echarts-gl/charts'
@@ -37,19 +37,17 @@ export default defineComponent({
   props: {
     // Expecting a Float32Array with [x,y,label index] format
     trainMappings: {
-      type: Float32Array,
+      type: Object as PropType<Float32Array>,
       required: true,
     },
     // Expecting a Float32Array with [x,y,label index] format
     testMappings: {
-      type: Float32Array,
+      type: Object as PropType<Float32Array>,
       required: false,
-      default: null,
     },
     classNames: {
       type: Array,
       required: true,
-      default: () => [],
     },
     themeName: {
       type: String,
@@ -177,15 +175,15 @@ export default defineComponent({
       const visualMap = Array.isArray(options.visualMap) ? options.visualMap[0] : options.visualMap
 
       // Type assertion for the visualMap to specify it's a PiecewiseVisualMapOption
-      // const currentSelection = (visualMap as echarts.PiecewiseVisualMapOption)?.selected || {}
-      const currentSelection = visualMap?.selected || {}
+      const currentSelection =
+        (visualMap as echarts.PiecewiseVisualMapComponentOption)?.selected || {}
 
-      let trainDataToShow: Float32Array | any[] = []
+      let trainDataToShow: Float32Array | number[][] = new Float32Array()
       if ((showBoth.value || showTrainOnly.value) && props.trainMappings) {
         trainDataToShow = props.trainMappings // Pass full data; visualMap will filter
       }
 
-      let testDataToShow: Float32Array | any[] = []
+      let testDataToShow: Float32Array | number[][] = new Float32Array()
       if ((showBoth.value || showTestOnly.value) && props.testMappings) {
         testDataToShow = props.testMappings // Pass full data; visualMap will filter
       }
@@ -212,8 +210,10 @@ export default defineComponent({
       if (!chart) return
 
       const options = chart.getOption() as echarts.EChartsOption
-      const visualMap = Array.isArray(options.visualMap) ? options.visualMap[0] : options.visualMap
-      const currentSelection = visualMap.selected || {}
+      const visualMap = (
+        Array.isArray(options.visualMap) ? options.visualMap[0] : options.visualMap
+      ) as echarts.PiecewiseVisualMapComponentOption
+      const currentSelection = visualMap?.selected || {}
 
       for (let i = 0; i < visualMap.pieces!.length; i++) {
         currentSelection[i] = show
