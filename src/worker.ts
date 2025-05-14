@@ -120,7 +120,7 @@ const numThreads = navigator.hardwareConcurrency - 1
 // reduce the batch size so that inference can be parallelized across more
 // threads. The ONNX model supports variable size batches which plays into
 // this as well.
-const batchSize = numThreads - 1
+const batchSize = 2 * numThreads
 
 console.log(`Number of threads: ${numThreads}`)
 console.log(`Batch size: ${batchSize}`)

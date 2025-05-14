@@ -593,7 +593,6 @@ watch(
     if (newMappings && newMappings.length > 0) {
       // The mappings loaded from the file are already in Float32Array format
       trainMappings.value = newMappings
-      console.log(`Model data loaded with ${newMappings.length / 3} points`)
     }
   },
   { immediate: true },
@@ -605,7 +604,6 @@ watch(
     if (newMappings && newMappings.length > 0) {
       // The mappings loaded from the file are already in Float32Array format
       testMappings.value = newMappings
-      console.log(`Model data loaded with ${newMappings.length / 3} points`)
     }
   },
   { immediate: true },

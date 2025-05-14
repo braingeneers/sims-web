@@ -26,10 +26,9 @@ import * as echarts from 'echarts'
 import { ScatterGLChart } from 'echarts-gl/charts'
 
 import { GridComponent, VisualMapComponent, LegendComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 
 // Register necessary components
-echarts.use([ScatterGLChart, GridComponent, VisualMapComponent, LegendComponent, CanvasRenderer])
+echarts.use([ScatterGLChart, GridComponent, VisualMapComponent, LegendComponent])
 
 // Custom color palette
 const customColors = [
@@ -111,7 +110,6 @@ export default defineComponent({
     const showBoth = ref(true)
     const showTrainOnly = ref(false)
     const showTestOnly = ref(false)
-    // const hiddenClasses = ref<Set<number>>(new Set())
 
     const pieces = computed(() => {
       return props.classNames.map((name, index) => {
@@ -295,17 +293,14 @@ export default defineComponent({
     watch(
       () => props.classNames,
       () => initChart(),
-      { deep: true },
     )
     watch(
       () => props.trainMappings,
       () => initChart(),
-      { deep: true },
     )
     watch(
       () => props.testMappings,
       () => updateChart(),
-      { deep: true },
     )
     watch(
       () => props.themeName,

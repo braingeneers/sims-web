@@ -4,13 +4,17 @@ https://github.com/braingeneers/SIMS/archive/refs/heads/main.zip
 # Tiny mod to compute sparsemax in double precision for onnx concordance
 https://github.com/rcurrie/tabnet/archive/refs/heads/onnx.zip
 
+
+
 onnx>=1.17.0
 onnxruntime>=1.21.0
 sclblonnx==0.3.0
 
 netron
 
-../umap_pytorch
+# Tiny mods to support cpu and apple gpu in addition to cuda
+# ../umap_pytorch
+https://github.com/rcurrie/umap_pytorch/archive/refs/heads/main.zip
 
 typer[all]==0.9.0
 anndata>=0.8.0
