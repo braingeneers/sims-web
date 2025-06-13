@@ -35,11 +35,15 @@ export default defineConfig({
   /* Configure projects for major browsers */
   projects: [
     {
-      name: 'chromium',
+      name: 'Chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // Launch full screen and unlimited viewport when headless
+        // See https://dev.to/muhendiskedibey/how-to-full-screen-a-browser-in-playwright-1np1
+        deviceScaleFactor: undefined,
+        viewport: null, // Use the default viewport size
         launchOptions: {
-          args: ['--remote-debugging-port=9222'], // Enable debugging on port 9222
+          args: ['--remote-debugging-port=9222', '--start-maximized'], // Enable debugging on port 9222
         },
       },
     },

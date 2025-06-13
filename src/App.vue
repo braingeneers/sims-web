@@ -1,11 +1,10 @@
 <template>
   <v-app>
-    <!-- Navigation Drawer with hamburger in its header -->
-    <v-navigation-drawer v-model="drawerOpen" :temporary="$vuetify.display.smAndDown" app>
+    <!-- Navigation Drawer - always visible with fixed width -->
+    <v-navigation-drawer permanent app width="300">
       <v-list>
         <v-list-item>
           <div class="d-flex align-center w-100">
-            <v-app-bar-nav-icon @click="toggleDrawer" class="ml-n2"></v-app-bar-nav-icon>
             <v-list-item-title class="text-h6 mr-auto">SIMS Web</v-list-item-title>
             <v-btn
               variant="text"
@@ -41,27 +40,20 @@
         <!-- File Selector -->
         <v-list-item>
           <template #prepend>
-            <v-icon>mdi-dna</v-icon>
+            <v-icon>mdi-file</v-icon>
           </template>
-          <v-list-item-title>Select File</v-list-item-title>
-          <v-list-item-subtitle v-if="selectedFile">
-            {{
-              selectedFile.name.length > 20
-                ? selectedFile.name.slice(0, 15) + '...'
-                : selectedFile.name
-            }}
-          </v-list-item-subtitle>
-          <template v-slot:append>
-            <v-file-input
-              v-model="selectedFile"
-              accept=".h5ad"
-              hide-details
-              density="compact"
-              variant="plain"
-              class="file-input-hidden"
-              @update:model-value="handleFileSelected"
-            ></v-file-input>
-          </template>
+          <v-file-input
+            v-model="selectedFile"
+            accept=".h5ad"
+            hide-details
+            density="compact"
+            variant="plain"
+            class="mt-n2 file-input-hidden"
+            prepend-icon=""
+            placeholder="Click to select .h5ad file"
+            label="Click to select .h5ad file"
+            @update:model-value="handleFileSelected"
+          ></v-file-input>
         </v-list-item>
 
         <!-- Background Dataset and Model Selector -->
@@ -99,31 +91,21 @@
           <v-list-item-title>Stop</v-list-item-title>
         </v-list-item>
 
-        <v-divider class="my-2"></v-divider>
-
-        <!-- Theme Toggle -->
-        <v-list-item @click="toggleTheme">
-          <template #prepend>
-            <v-icon>mdi-theme-light-dark</v-icon>
-          </template>
-          <v-list-item-title>Toggle Theme</v-list-item-title>
-        </v-list-item>
-      </v-list>
-
-      <!-- Bottom of left side bar -->
-      <template v-slot:append>
-        <!-- Processing Progress -->
+        <!-- Processing Progress and Status -->
         <div v-if="isProcessing" class="pa-2">
           <v-progress-linear
             :model-value="processingProgress"
             color="primary"
             height="4"
           ></v-progress-linear>
-          <div class="text-caption mt-1">{{ currentStatus }}</div>
         </div>
+        <div v-if="currentStatus" class="text-caption pa-2 pt-0">{{ currentStatus }}</div>
+      </v-list>
 
+      <!-- Bottom of left side bar -->
+      <template v-slot:append>
         <!-- Analysis Progress Timeline in the drawer -->
-        <div v-if="analysisResults.length > 0" class="pa-2 mt-auto">
+        <div v-if="analysisResults.length > 0" class="pa-2">
           <v-divider class="mb-2"></v-divider>
           <div class="text-subtitle-2 mb-1">Analysis Progress</div>
           <v-timeline density="compact" class="analysis-timeline">
@@ -140,19 +122,17 @@
             </v-timeline-item>
           </v-timeline>
         </div>
+
+        <!-- Theme Toggle at bottom -->
+        <v-divider class="my-2"></v-divider>
+        <v-list-item @click="toggleTheme">
+          <template #prepend>
+            <v-icon>mdi-theme-light-dark</v-icon>
+          </template>
+          <v-list-item-title>Toggle Theme</v-list-item-title>
+        </v-list-item>
       </template>
     </v-navigation-drawer>
-
-    <!-- Updated floating button to toggle drawer when it's closed -->
-    <v-btn
-      v-if="!drawerOpen"
-      icon="mdi-menu"
-      size="large"
-      color="primary"
-      style="position: fixed; top: 12px; left: 2px; z-index: 100"
-      @click="toggleDrawer"
-      class="floating-menu-btn"
-    ></v-btn>
 
     <v-main>
       <v-container fluid>
@@ -178,7 +158,8 @@
           <v-card-title>{{ resultsDB.datasetLabel }}</v-card-title>
           <v-card-text data-cy="results">
             <div>
-              <strong>Cells:</strong> {{ resultsDB.cellNames.length }} <strong>Genes:</strong>
+              <strong>Cells:</strong> {{ resultsDB.cellNames.length }}
+              <strong>Genes:</strong>
               {{ resultsDB.genes.length }}
             </div>
             <div>
@@ -232,12 +213,6 @@ import SIMSWorker from './worker.ts?worker'
 
 import ScatterPlotWebGL from './ScatterPlotWebGL.vue'
 import PredictionsTable from './PredictionsTable.vue'
-
-// Drawer state
-const drawerOpen = ref(true)
-function toggleDrawer() {
-  drawerOpen.value = !drawerOpen.value
-}
 
 const theme = useTheme()
 const isProcessing = ref(false)
@@ -550,9 +525,6 @@ function handlePredictWorkerMessage(event: MessageEvent) {
       summary: `Processed ${event.data.totalProcessed} items in ${processingTime.value.toFixed(2)} seconds`,
     })
 
-    // Auto-collapse drawer when finished/
-    // drawerOpen.value = false
-
     // Load the dataset
     loadDataset()
   } else if (type === 'predictionError') {
@@ -636,6 +608,11 @@ onUnmounted(() => {
   padding-top: 0;
 }
 
+.file-input-hidden :deep(.v-field__input input::placeholder) {
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+  opacity: 1 !important;
+}
+
 /* Styling for the timeline in the drawer */
 .analysis-timeline {
   max-height: 200px;
@@ -644,5 +621,10 @@ onUnmounted(() => {
 
 .analysis-timeline :deep(.v-timeline-item__body) {
   padding: 4px 0;
+}
+
+/* Reduce spacing between prepend icons and content */
+.v-list-item :deep(.v-list-item__prepend) {
+  margin-inline-end: 8px !important;
 }
 </style>
